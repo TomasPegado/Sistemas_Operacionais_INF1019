@@ -6,24 +6,21 @@
 
 int main(void){
 
-    pid_t pidfilho, pidpai;
+    int pidfilho;
 	int status;
 	
-	pidfilho = fork(); //retorna o pid do filho
-	pidpai = getpid(); //retorna o pid do pai
+	pidfilho = fork();
 
 	if( pidfilho != 0 ){
-		printf("\n Processo pai iniciado \n");
-		printf("\n pid do pai %d \n", pidpai);
-		printf("\n pid do filho %d \n", pidfilho);
+	
+		printf("\n pid do pai %d \n", getpid());
+		
 		waitpid(-1, &status, 0);
-		printf("\n Processo do pai finalizado \n");
+		
 	}
 	else {
-		printf("\n Processo filho iniciado \n");
-		printf("\n pid do pai %d \n", pidpai);
-		printf("\n pid do filho %d \n", pidfilho);
-		printf("\n Processo do filho finalizado \n");
+		printf("\n pid do filho %d \n", getpid());
+	
 	}
 	return 0;
 }

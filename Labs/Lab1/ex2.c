@@ -8,18 +8,19 @@ int main(void){
 
 	// variaveis
 	int var;
-    pid_t pidfilho, pidpai;
+    int filho;
 	int status;
 	
-	pidfilho = fork(); //retorna o pid do filho
-	pidpai = getpid(); //retorna o pid do pai
 
-	if( pidfilho != 0 ){
-		printf("\n Processo pai iniciado \n");
-		printf("\n pid do pai %d \n", pidpai);
-		var = 1;
-		printf("\n Variável = %d \n", var);
-		printf("\n pid do filho %d \n", pidfilho);
+	var = 1;
+	printf("\n Processo pai iniciado \n");
+	printf("\n pid do pai %d \n", getpid());
+	printf("\n Variável = %d \n", var);
+	filho = fork();
+
+
+	if( filho != 0 ){
+		
 		waitpid(-1, &status, 0);
 		printf("\n Variável = %d \n",var);
 		printf("\n Processo do pai finalizado \n");
@@ -28,8 +29,6 @@ int main(void){
 		printf("\n Processo filho iniciado \n");
 		var = 5;
 		printf("\n Variável = %d \n",var);
-		printf("\n pid do pai %d \n", pidpai);
-		printf("\n pid do filho %d \n", pidfilho);
 		printf("\n Processo do filho finalizado \n");
 	}
 	return 0;
