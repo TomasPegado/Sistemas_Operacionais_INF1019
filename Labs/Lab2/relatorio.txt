@@ -1,0 +1,240 @@
+Nome: Tomás Lenzi
+Matrícula: 2220711
+
+Questão 1)Faça um programa para somar matrizes de acordo
+com o seguinte algoritmo:
+    O primeiro processo irá criar duas matrizes
+preenchidas e uma terceira vazia em 3 áreas de
+memória compartilhada.
+    Para cada linha da matriz solução, o seu
+programa deverá gerar um processo para o seu
+cálculo.
+
+    Código Fonte:
+
+    #include <stdio.h>
+    #include <stdlib.h>
+    #include <sys/ipc.h>
+    #include <sys/shm.h>
+    #include <sys/stat.h>
+    #include <unistd.h>
+    #include <sys/wait.h>
+
+    #define SIZE 3 // Definindo uma matriz 3x3
+
+    // Função para calcular a soma de uma linha
+    void sum_row(int *A, int *B, int *C, int row) {
+        int start = row * SIZE;
+        for (int i = 0; i < SIZE; i++) {
+            C[start + i] = A[start + i] + B[start + i];
+        }
+    }
+
+    int main(void) {
+        int shmid_A, shmid_B, shmid_C, status;
+        int *A, *B, *C;
+
+        // Alocação de memória compartilhada
+        shmid_A = shmget(IPC_PRIVATE, SIZE*SIZE*sizeof(int), IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
+        shmid_B = shmget(IPC_PRIVATE, SIZE*SIZE*sizeof(int), IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
+        shmid_C = shmget(IPC_PRIVATE, SIZE*SIZE*sizeof(int), IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
+
+        // Attachment de cada matriz na memória compartilhada
+        A = (int *)shmat(shmid_A, NULL, 0);
+        B = (int *)shmat(shmid_B, NULL, 0);
+        C = (int *)shmat(shmid_C, NULL, 0);
+
+        // Preenchendo as matrizes A e B
+        for (int i = 0; i < SIZE*SIZE; i++) {
+            A[i] = i + 1; // Exemplo de preenchimento
+            B[i] = (i + 1) * 2; // Exemplo de preenchimento
+        }
+
+        // Criando processos filhos para calcular cada linha
+        for (int i = 0; i < SIZE; i++) {
+
+            if (fork() != 0){ // cria um processo filho para cada linha
+
+                waitpid(-1, &status, 0); // espera cada processo filho terminar
+            } else {
+                sum_row(A, B, C, i);
+                exit(0);
+            }
+        }
+
+
+        // Imprimindo a matriz A
+        printf("Matriz A:");
+        for (int i = 0; i < SIZE*SIZE; i++) {
+            if (i % SIZE == 0) printf("\n");
+            printf("%d\t", A[i]);
+        }
+        printf("\n\n");
+
+        // Imprimindo a matriz B
+        printf("Matriz B:");
+        for (int i = 0; i < SIZE*SIZE; i++) {
+            if (i % SIZE == 0) printf("\n");
+            printf("%d\t", B[i]);
+        }
+        printf("\n\n");
+
+        // Imprimindo a matriz resultante
+        printf("Matriz Resultante:");
+        for (int i = 0; i < SIZE*SIZE; i++) {
+            if (i % SIZE == 0) printf("\n");
+            printf("%d\t", C[i]);
+        }
+        printf("\n\n");
+
+        // Fazendo o desattach da memória compartilhada
+        shmdt(A);
+        shmdt(B);
+        shmdt(C);
+
+        // Liberando o local da memória compartilhada
+        shmctl(shmid_A, IPC_RMID, NULL);
+        shmctl(shmid_B, IPC_RMID, NULL);
+        shmctl(shmid_C, IPC_RMID, NULL);
+
+        return 0;
+    }
+
+    Linha de Comando p/ compilação e execução do programa:
+
+        gcc -Wall -o ex1 ex1.c
+        ./ex1
+
+    Saida gerada:
+
+        Matriz A:
+        1       2       3
+        4       5       6
+        7       8       9
+
+        Matriz B:
+        2       4       6
+        8       10      12
+        14      16      18
+
+        Matriz Resultante:
+        3       6       9
+        12      15      18
+        21      24      27
+
+    Relatório:
+
+    O codigo comeca definindo uma funcao para calcular a soma de uma linha de duas matrizes e salvar o resultado em uma terceira matriz.
+    Em seguida, iniciamos a main usando o shmget para a alocação dos espaços de memória de cada matriz em memórias compartilhadas, ou seja, para cada matriz
+    tivemos uma área de memória compartilhada. Logo após, temos o Attachment dos ponteiros das matrizes (ponteiros para vetores de inteiros) nas áreas de
+    memoria compartilhada usando o shmat.
+    Agora, usamos um algoritmo basico para preencher as matrizes A e B de valores e, depois, entramos com o algoritmo para criar processos filhos que vão fazer o calculo
+    da soma de cada linha das matrizes A e B. Esse segundo, consiste em for que cria um loop e implementa o processo filho da forma como vimos no último laboratório.
+    Por ultimo, temos a exibicao das matrizes e o desattach e liberacao das areas de memoria compartilhada.
+
+Questao 2) Faça um programa que:
+    Leia uma mensagem do dia do stdin (ou arquivo)
+    Crie uma memória compartilhada com a chave 8752
+    Salve a mensagem na memória
+
+    Faça um outro programa “cliente” que utilize
+    a mesma chave (8752) e exiba a mensagem
+d   o dia para o usuário
+
+    Codigo fonte:
+
+    #include <stdio.h>
+    #include <stdlib.h>
+    #include <string.h>
+    #include <sys/ipc.h>
+    #include <sys/shm.h>
+    #include <sys/stat.h>
+    #include <unistd.h>
+    #include <sys/wait.h>
+
+    #define SHM_KEY 8752
+    #define MAX_SIZE 1024
+
+    int main() {
+        int shmid, cliente, status;
+        char *data;
+
+        // Criar memória compartilhada
+        shmid = shmget(SHM_KEY, MAX_SIZE, IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
+        if (shmid == -1) {
+            perror("shmget");
+            exit(1);
+        }
+
+        // Anexar data a memória compartilhada
+        data = (char *)shmat(shmid, NULL, 0);
+        if (data == (char *)(-1)) {
+            perror("shmat");
+            exit(1);
+        }
+
+        // Ler a mensagem do dia do stdin
+        printf("Digite a mensagem do dia: ");
+        if (fgets(data, MAX_SIZE, stdin) == NULL) {
+            perror("fgets");
+            exit(1);
+        }
+
+        printf("\n Mensagem salva na memória compartilhada.\n");
+
+        cliente = fork();
+
+        if (cliente != 0){
+
+            waitpid(-1, &status, 0);
+            shmdt(data);
+            printf("\n Mensagem desanexada da area de memoria.\n");
+            shmctl(shmid, IPC_RMID, NULL);
+            printf("\n Area de memoria compartilhada identificada por schmid foi removida.\n");
+            printf("\n Processos finalizados.\n");
+            
+        } else {
+            printf("\n Processo cliente inicializado.\n");
+            printf("\n Mensagem do dia: %s\n", data);
+            printf("\n Processo cliente finalizado.\n");
+
+        }
+        
+
+        return 0;
+    }
+
+    Linha de Comando p/ compilação e execução do programa:
+
+            gcc -Wall -o ex2 ex2.c
+            ./ex2
+
+    Saida gerada:
+        Digite a mensagem do dia: Sistemas Operacionais e muito legal
+
+        Mensagem salva na memória compartilhada.
+
+        Processo cliente inicializado.
+
+        Mensagem do dia: Sistemas Operacionais e muito legal
+
+
+        Processo cliente finalizado.
+
+        Mensagem desanexada da area de memoria.
+
+        Area de memoria compartilhada identificada por schmid foi removida.
+
+        Processos finalizados.
+
+    Relatorio:
+
+    Criamos uma área de memoria compartilhada usando a chave 8752, em seguida, fazemos o Attachment do ponteiro para char na area de memoria
+    compartilhada criada usando "data = (char *)shmat(shmid, NULL, 0);".
+    Após isso, fazemos o programa ler alguma mensagem do teclado com stdin e salvamos a mensagem em data.
+    Agora, criamos um processo cliente que vai acessar a mesma área de memória compartilhada e vai ler a mensagem do dia.
+    Por fim, após o encerramento do processo cliente temos a liberação do espaço da memória compartilhada. 
+
+
+
+
