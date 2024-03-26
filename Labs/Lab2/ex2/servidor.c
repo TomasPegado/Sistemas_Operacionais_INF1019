@@ -24,7 +24,7 @@ int main() {
     // Anexar data a memória compartilhada
     data = (char *)shmat(shmid, NULL, 0);
     if (data == (char *)(-1)) {
-        perror("shmat");
+    perror("shmat");
         exit(1);
     }
 
