@@ -17,7 +17,8 @@ int main(void)
     char stringShmid[20];
 
     // variaveis
-    int *p1, *p2, status;
+    int *p1, *p2;
+    
 
     // Criar memória compartilhada
     shmid = shmget(IPC_PRIVATE, sizeof(int) * 2, IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
@@ -32,7 +33,8 @@ int main(void)
         if (fork() != 0)
         {
 
-            waitpid(-1, &status, 0);
+            //waitpid(-1, &status, 0);
+            printf("Filho %d gerado\n",i+1);
         }
         else
         {
@@ -45,8 +47,18 @@ int main(void)
         }
     }
 
-    printf("p1 = %d\n", *p1);
-    printf("p2 = %d\n", *p2);
+    while(*p1 == 0 || *p2==0){
+                sleep(1);
+                printf("Valor p1:  %d\n", *p1);
+                printf("Valor p2:  %d\n", *p2);
+            }
+
+//     while(waitpid(-1,&status,0)!=-1){
+//      printf("p1 = %d\n", *p1);
+//      printf("p2 = %d\n", *p2);
+
+//     } // espera todos os processos
+    
     printf("produto = %d\n", *p1 * *p2);
     return 0;
 }

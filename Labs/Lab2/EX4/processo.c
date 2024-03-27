@@ -41,9 +41,10 @@ int main(int argc, char *argv[]){
     printf("Processo %d ira dormir por %d segundos\n", i+1, sleepTime);
     sleep(sleepTime);
     
+    
 
     //numero randomico
-    int randomValue = rand() % 100; // Numeros entre 0 e 99
+    int randomValue = rand() % 100+1; // Numeros entre 0 e 99
     *p = randomValue;
     printf("Filho %d gerou um novo numero.\n", i+1);
 
