@@ -236,5 +236,286 @@ d   o dia para o usuário
     Por fim, após o encerramento do processo cliente temos a liberação do espaço da memória compartilhada. 
 
 
+Questao 3)  Faça um programa paralelo (com pelo menos
+4 processos) para localizar uma chave em
+um vetor. Crie uma memória compartilhada com dados
+numéricos inteiros e desordenados e a divida
+pelo número de processos Cada processo deve procurar o dado na sua área
+de memória e informar a posição onde o dado foi
+localizado
+
+
+codigo fonte:
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <sys/wait.h>
+
+#define VETOR_TAMANHO 100
+#define NUM_PROCESSOS 4
+
+// Função para procurar a chave no vetor
+void procurar_chave(int *vetor, int inicio, int fim, int chave, int pid, int *p)
+{
+    for (int i = inicio; i < fim; i++)
+    {
+        if (vetor[i] == chave)
+        {
+            printf("Processo %d encontrou a chave %d na posição %d.\n", pid, chave, i);
+            *p = i;
+            exit(0); // Termina se encontrar a chave
+        }
+        // printf("Vetor[%d]: %d.\n", i, vetor[i]);
+    }
+    printf("Processo %d não encontrou a chave %d.\n", pid, chave);
+    exit(0); // Termina se não encontrar a chave
+}
+
+int main()
+{
+    int shmid, status;
+    int *vetor, *p;
+    int chave = 25; // Exemplo de chave a ser procurada
+
+    // Criar memória compartilhada
+    shmid = shmget(IPC_PRIVATE, (VETOR_TAMANHO + 1) * sizeof(int), IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
+    p = (int *)shmat(shmid, NULL, 0);
+    vetor = p + 1;
+
+    // Preencher o vetor com valores aleatórios
+    for (int i = 0; i < VETOR_TAMANHO; i++)
+    {
+        vetor[i] = rand() % 100; // Valores entre 0 e 99
+    }
+
+    int tamanho_parte = VETOR_TAMANHO / NUM_PROCESSOS;
+
+    // Criar processos e dividir o trabalho
+    for (int i = 0; i < NUM_PROCESSOS; i++)
+    {
+
+        if (fork() != 0)
+        {
+
+            // waitpid(-1, &status, 0);
+            printf("Processo %d criado.\n",i+1);
+        }
+        else
+        {
+            int inicio = i * tamanho_parte;
+            int fim = inicio + tamanho_parte;
+            procurar_chave(vetor, inicio, fim, chave, getpid(), p);
+        }
+    }
+    while (waitpid(-1,&status,0)!=-1);
+    
+
+    printf("\nPosição %d salva no processo pai.\n", *p);
+
+    // Desanexar e remover a memória compartilhada
+    shmdt(vetor);
+    shmctl(shmid, IPC_RMID, NULL);
+
+    return 0;
+}
+
+Linha de Comando p/ compilação e execução do programa:
+
+            gcc -Wall -o ex3 ex3.c
+            ./ex3
+
+Saida gerada:
+
+Processo 1 criado.
+Processo 2 criado.
+Processo 8508 não encontrou a chave 25.
+Processo 3 criado.
+Processo 8509 não encontrou a chave 25.
+Processo 4 criado.
+Processo 8510 encontrou a chave 25 na posição 61.
+Processo 8511 não encontrou a chave 25.
+
+Posição 61 salva no processo pai.
+
+Relatorio:
+
+O que conseguimos fazer com esse programa é criar 4 processos que procuram por uma chave em um vetor, em paralelo e cada um em uma 
+area do vetor reduzindo a complexidade do problema de n para n/4.
+
+
+Questao 4) 4) Multiplicação multi-processo
+Faça um programa que:
+Tenha um processo pai que abre dois blocos de
+memória compartilhada, m1 e m2.
+cria dois processos filho (use exec), P1 e P2: estes
+também fazem attach em m1 ou m2 respectivamente
+Cada um dá um sleep() randômico e escreve um valor
+int na área compartilhada dele, e avisa o processo pai
+que um novo valor foi gerado, escrevendo tb um nr de
+sequencia
+O pai fica em loop verificando se houve um novo valor.
+Apenas quando ambos P1 e P2 geraram um novo valor,
+o pai imprime o produto dos valores gerados por P1 e
+P2
+
+Codigo fonte:
+
+    ex4.c 
+    #include <stdio.h>
+#include <stdlib.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <time.h>
+
+#define NUM_FILHOS 2
+
+int main(void)
+{
+
+    // Area de memoria compartilhada
+    int shmid;
+    char stringShmid[20];
+
+    // variaveis
+    int *p1, *p2;
+    
+
+    // Criar memória compartilhada
+    shmid = shmget(IPC_PRIVATE, sizeof(int) * 2, IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
+    sprintf(stringShmid, "%d", shmid);
+    p1 = (int *)shmat(shmid, NULL, 0);
+    p2 = p1 + 1;
+
+    char num[20];
+    for (int i = 0; i < NUM_FILHOS; i++)
+    {
+
+        if (fork() != 0)
+        {
+
+            //waitpid(-1, &status, 0);
+            printf("Filho %d gerado\n",i+1);
+        }
+        else
+        {
+            sprintf(num, "%d", i);
+            if (execl("./processo", "processo.c", stringShmid, num, NULL) == -1)
+            {
+                perror("execl failed");
+                exit(EXIT_FAILURE);
+            }
+        }
+    }
+
+    while(*p1 == 0 || *p2==0){
+                sleep(1);
+                printf("Valor p1:  %d\n", *p1);
+                printf("Valor p2:  %d\n", *p2);
+            }
+
+//     while(waitpid(-1,&status,0)!=-1){
+//      printf("p1 = %d\n", *p1);
+//      printf("p2 = %d\n", *p2);
+
+//     } // espera todos os processos
+    
+    printf("produto = %d\n", *p1 * *p2);
+    return 0;
+}
+
+    processo.c
+    #include <stdio.h>
+#include <stdlib.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <time.h>
+
+
+int main(int argc, char *argv[]){
+
+// Receber o parametro indicando a area de memoria
+
+// Fazer o attach de uma variavel int na area
+
+// Fazer o sleep randomico
+
+// Colocar o valor na variavel
+
+// retornar para o pai
+
+    if (argc != 3) {
+
+        printf("Usage: %s <shmid> <i>\n", argv[0]);
+        return 1;
+    }
+
+    //Convertendo os valores de string para inteiros
+    int shmid = atoi(argv[1]);
+    int i = atoi(argv[2]);
+
+    //dando attach na memoria
+    int *p;
+    p = (int *)shmat(shmid, NULL, 0) + i;
+
+    
+    //sleep randomico
+    srand(time(NULL));
+    int sleepTime = rand() % 5 + 1; // numero aleatório entre [1, 10]
+    printf("Processo %d ira dormir por %d segundos\n", i+1, sleepTime);
+    sleep(sleepTime);
+    
+    
+
+    //numero randomico
+    int randomValue = rand() % 100+1; // Numeros entre 0 e 99
+    *p = randomValue;
+    printf("Filho %d gerou um novo numero.\n", i+1);
+
+
+    return 0;
+
+}
+
+Linha de Comando p/ compilação e execução do programa:
+
+            gcc -Wall -o processo processo.c
+            gcc -Wall -o ex4 ex4.c
+            ./ex4
+
+Saida gerada:
+
+    Filho 1 gerado
+    Filho 2 gerado
+    Processo 2 ira dormir por 4 segundos
+    Processo 1 ira dormir por 4 segundos
+    Valor p1:  0
+    Valor p2:  0
+    Valor p1:  0
+    Valor p2:  0
+    Valor p1:  0
+    Valor p2:  0
+    Valor p1:  0
+    Filho 2 gerou um novo numero.
+    Valor p2:  89
+    Filho 1 gerou um novo numero.
+    Valor p1:  89
+    Valor p2:  89
+    produto = 7921
+
+Relatorio:
+
+Criamos dois processos rodando em parelelo e o principal esperou cada um terminar antes de seguir e calcular o produto dos 
+valores gerados. Percebemos que o segundo processo criado terminou primeiro e o programa esperou pela primeiro processo terminar.
+
 
 
