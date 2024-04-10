@@ -33,13 +33,17 @@ int main(void){
             
         } else {
             printf("PID do processo: %d.\n", getpid());
-            filhos[i] = getpid();
+            if (i == 0){
+                *p1 = getpid();
+            } else {
+                *p2 = getpid();
+            }
             for (EVER);
         }
     }
 
-printf("PID do processo 1: %d.\n", filhos[0]);
-printf("PID do processo 2: %d.\n", filhos[1]);
+printf("PID do processo 1: %d.\n", *p1);
+printf("PID do processo 2: %d.\n", *p2);
 while (waitpid(-1,&status,0)!=-1);
 
 
