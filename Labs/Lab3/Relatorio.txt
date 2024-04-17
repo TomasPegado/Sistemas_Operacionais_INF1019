@@ -1,0 +1,187 @@
+Nome: Tomás Lenzi
+Matrícula: 2220711
+
+Questão 1) Execute o programa "ctrl-c.c”.
+Digite Ctrl-C e Ctrl-\. Analise o resultado.
+Neste mesmo programa, remova os
+comandos signal( ) e repita o teste anterior
+observando os resultados. 
+
+Relatorio:
+
+Vemos que os tratadores de Sinais mudaram a execução default deles, permitindo
+a manipulação dos sinais para o programa a fim de cumprir algo específico dele, que 
+nesse caso seria a desabilitação do Ctrl-C.
+
+Questão 2) Tente fazer um programa para interceptar o
+sinal SIGKILL. Você conseguiu? Explique.
+
+Código:
+    #include <stdio.h>
+#include <signal.h>
+#include <stdlib.h>
+#define EVER ;;
+
+void killHandler(int sinal);
+
+int main(void) {
+    printf("\n pid = %d \n", getpid());
+    signal(SIGKILL, killHandler);
+    for (EVER);
+    return 0;
+
+}
+
+
+void killHandler(int sinal){
+
+    if (sinal == 9){
+        printf("Sinal Kill interceptado (%d)", sinal);
+        exit(0);
+    }
+}
+
+Linha de Comando p/ compilação e execução do programa:
+
+            gcc -Wall -o ex2 ex2.c
+            ./ex2
+
+Relatorio:
+    Vemos que o programa não consegue interceptar o SIGKILL e que ele não pode ser
+    ignorado ou atrasado, finalizando o processo imediatamente.
+
+
+Questão 3)  Execute e explique o funcionamento de
+filhocidio.c
+
+Linha de Comando p/ compilação e execução do programa:
+
+            gcc -Wall -o ex3 ex3.c
+            ./ex3 3 ex3
+
+Saida gerada:
+
+    Program ex3 exceeded limit of 3 seconds!
+    Child 48836 terminated within 3 seconds com estado 0.
+
+Relatorio:
+    Esse código é um exemplo de como criar um processo filho em C e usar sinais para monitorar seu estado.
+    este código demonstra um mecanismo simples para o processo pai monitorar e limitar o tempo de execução de um processo filho. 
+    Se o processo filho terminar por conta própria antes do tempo limite, o processo pai será notificado através do sinal SIGCHLD e terminará. 
+    Se o processo filho exceder o tempo limite, o processo pai o terminará com SIGKILL.
+
+Questão 4)  Usando SIGSTOP e SIGCONT faça um
+programa que crie 2 processos filho e alterne a
+execução dos filhos. Após 10 trocas de
+contexto, o processo pai mata os processos
+filho.
+OBS: Os processos filho são formados por loops
+infinitos. 
+
+
+Código:
+        #include <stdio.h>
+        #include <signal.h>
+        #include <stdlib.h>
+        #include <unistd.h>
+        #include <sys/ipc.h>
+        #include <sys/shm.h>
+        #include <sys/stat.h>
+
+        // Função para tratar sinal SIGCONT
+        void sigcont_handler(int sig) {
+            printf("Processo %d continuado com SIGCONT\n", getpid());
+        }
+
+        int main(void) {
+            int contador = 0, alternador = 0;
+            int shmid;
+            int *p1, *p2;
+
+            // Criar memória compartilhada
+            shmid = shmget(IPC_PRIVATE, sizeof(int) * 2, IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
+            p1 = (int *)shmat(shmid, NULL, 0);
+            p2 = p1 + 1;
+
+            for (int i = 0; i < 2; i++) {
+                int pid = fork();
+                if (pid > 0) {
+                    // Processo pai
+                    printf("Processo %d iniciado.\n", i + 1);
+                    if (i == 0) *p1 = pid;
+                    else *p2 = pid;
+                } else if (pid == 0) {
+                    // Processo filho
+                    printf("PID do processo: %d.\n", getpid());
+                    
+                    // Registrar o tratador para SIGCONT
+                    signal(SIGCONT, sigcont_handler);
+                    
+                    while (1); // Loop infinito
+                } else {
+                    // Erro ao criar processo filho
+                    perror("fork");
+                    exit(EXIT_FAILURE);
+                }
+            }
+
+            // Dar tempo para que os processos filhos configurem os tratadores de sinal
+            sleep(1);
+
+            // Alternar entre os processos filhos usando SIGSTOP e SIGCONT
+            while (contador < 10) {
+                int pidToStop = alternador == 0 ? *p1 : *p2;
+                int pidToCont = alternador == 0 ? *p2 : *p1;
+                
+                kill(pidToStop, SIGSTOP);
+                kill(pidToCont, SIGCONT);
+                
+                printf("Processo %d pausado, processo %d continuado.\n", pidToStop, pidToCont);
+                
+                alternador = 1 - alternador;
+                contador++;
+                sleep(1); // Dar um tempo entre as alternâncias
+            }
+
+            // Terminar os processos filhos depois de 10 alternâncias
+            kill(*p1, SIGKILL);
+            kill(*p2, SIGKILL);
+            
+            return 0;
+        }
+
+Linha de Comando p/ compilação e execução do programa:
+
+            gcc -Wall -o ex4 ex4.c
+            ./ex4
+
+Saida gerada:
+
+    Processo 1 iniciado.
+    PID do processo: 52549.
+    Processo 2 iniciado.
+    PID do processo: 52550.
+    Processo 52549 pausado, processo 52550 continuado.
+    Processo 52550 continuado com SIGCONT
+    Processo 52550 pausado, processo 52549 continuado.
+    Processo 52549 continuado com SIGCONT
+    Processo 52549 pausado, processo 52550 continuado.
+    Processo 52550 continuado com SIGCONT
+    Processo 52550 pausado, processo 52549 continuado.
+    Processo 52549 continuado com SIGCONT
+    Processo 52549 pausado, processo 52550 continuado.
+    Processo 52550 continuado com SIGCONT
+    Processo 52550 pausado, processo 52549 continuado.
+    Processo 52549 continuado com SIGCONT
+    Processo 52549 pausado, processo 52550 continuado.
+    Processo 52550 continuado com SIGCONT
+    Processo 52550 pausado, processo 52549 continuado.
+    Processo 52549 continuado com SIGCONT
+    Processo 52549 pausado, processo 52550 continuado.
+    Processo 52550 continuado com SIGCONT
+    Processo 52550 pausado, processo 52549 continuado.
+    Processo 52549 continuado com SIGCONT
+
+Relatorio:
+    Este programa ilustra uma aplicação prática do controle de processos e da comunicação interprocesso (IPC) 
+    através de sinais e memória compartilhada em sistemas operacionais do tipo Unix/Linux.
