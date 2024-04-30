@@ -185,3 +185,219 @@ Saida gerada:
 Relatorio:
     Este programa ilustra uma aplicação prática do controle de processos e da comunicação interprocesso (IPC) 
     através de sinais e memória compartilhada em sistemas operacionais do tipo Unix/Linux.
+
+
+Questão 5)  Faça um programa que leia 2 números e
+imprima o resultado das 4 operações básicas
+sobre estes 2 números.
+! Verifique o que acontece se o 2º. número
+da entrada for 0 (zero)
+! Capture o sinal de erro de floating point
+(SIGFPE) e repita a experiência anterior
+
+Código:
+
+    #include <stdio.h>
+    #include <stdlib.h>
+    #include <unistd.h>
+    #include <signal.h>
+    #include <sys/ipc.h>
+    #include <sys/shm.h>
+    #include <sys/stat.h>
+
+    int need_new_input = 0;  // Variável global para controle de nova entrada
+
+    void zeroHandler(int signal) {
+        printf("Divisão por zero é inválido.\n");
+        printf("Repita a operação.\n");
+        need_new_input = 1;  // Solicita nova entrada
+    }
+
+    void basicOperations(int *v1, int *v2) {
+        printf("Insira um número: \n");
+        scanf("%d", v1);
+
+        printf("Insira um segundo número: \n");
+        scanf("%d", v2);
+
+        printf("%d + %d = %d\n", *v1, *v2, *v1 + *v2);
+        printf("%d - %d = %d\n", *v1, *v2, *v1 - *v2);
+        printf("%d * %d = %d\n", *v1, *v2, *v1 * *v2);
+        
+        if (*v2 != 0) {
+            printf("%d / %d = %d\n", *v1, *v2, *v1 / *v2);
+            need_new_input = 0;
+        } else {
+            raise(SIGFPE);
+        }
+    }
+
+    int main(void) {
+        signal(SIGFPE, zeroHandler);
+        int v1, v2;
+        
+        do {
+            basicOperations(&v1, &v2);
+        } while (need_new_input);  // Continua pedindo novos dados se necessário
+
+        return 0;
+    }
+
+Linha de Comando p/ compilação e execução do programa:
+
+            gcc -Wall -o ex5 ex5.c
+            ./ex5
+
+Saida gerada:
+    Insira um número: 
+    5
+    Insira um segundo número: 
+    0
+    5 + 0 = 5
+    5 - 0 = 5
+    5 * 0 = 0
+    Divisão por zero é inválido.
+    Repita a operação.
+    Insira um número: 
+    1
+    Insira um segundo número: 
+    0
+    1 + 0 = 1
+    1 - 0 = 1
+    1 * 0 = 0
+    Divisão por zero é inválido.
+    Repita a operação.
+    Insira um número: 
+    3
+    Insira um segundo número: 
+    3
+    3 + 3 = 6
+    3 - 3 = 0
+    3 * 3 = 9
+    3 / 3 = 1
+
+Relatorio:
+    O código exemplifica o uso de sinais para tratamento de erros em operações críticas, como a divisão por zero, em ambiente de sistemas operacionais.
+    O tratamento adequado de sinais permite que o programa reaja de maneira controlada a exceções durante a execução, melhorando a robustez e a interatividade do sistema.
+
+Questão 6) Faça um programa para monitorar e informar o
+preço de chamadas telefônicas. O programa
+deverá ser executado em background.
+! O início e o término de uma chamada são
+informados através dos sinais SIGUSR1 e
+SIGUSR2, respectivamente.
+! O custo da ligação é de 2 centavos por
+segundo, para ligações de até 1 minuto ou de 1
+centavo por segundo a partir do 2º. minuto, ou
+seja, uma ligação de 1m30s custa R$1,50. 
+
+Código:
+    #include <stdio.h>
+    #include <signal.h>
+    #include <stdlib.h>
+    #include <unistd.h>
+    #define EVER \
+        ;        \
+        ;
+    int count = 0;
+    float preco;
+    int continua = 1;
+
+    void handler(int signum)
+    {
+        if (signum == SIGUSR1)
+        { // começa a ligação
+            preco = 0;
+        }
+
+        if (signum == SIGUSR2)
+        { // encerra a ligação
+            continua = 0;
+            if (count <= 60)
+                preco = count * 0.02;
+            else
+                preco = count * 0.01;
+            count = 0;
+        }
+    }
+
+    int main(void)
+    {
+
+        for (EVER)
+        {
+            signal(SIGUSR1, handler);
+            signal(SIGUSR2, handler);
+
+            int pid;
+            int comecar;
+            pid = getpid();
+
+            printf("PID: %d\n", pid);
+
+            printf("Deseja começar uma chamada? (1 para ligar e 0 para nao ligar)\n");
+            scanf("%d", &comecar);
+            
+            if (comecar)
+            {
+                continua = 1;
+                while (continua)
+                {
+                    count++;
+                    printf("chamada em andamento\n");
+                    sleep(1);
+                }
+            } else {
+                break;
+            }
+
+            printf("Preco: %f\n", preco);
+        }
+
+        return 0;
+    }
+
+Linha de Comando p/ compilação e execução do programa:
+
+            gcc -Wall -o ex6 ex6.c
+            ./ex6
+            kill -s SIGUSR2 19466
+
+Saida gerada:
+    PID: 19466
+    Deseja começar uma chamada? (1 para ligar e 0 para nao ligar)
+    1
+    chamada em andamento
+    chamada em andamento
+    chamada em andamento
+    chamada em andamento
+    chamada em andamento
+    chamada em andamento
+    chamada em andamento
+    chamada em andamento
+    chamada em andamento
+    chamada em andamento
+    chamada em andamento
+    chamada em andamento
+    chamada em andamento
+    chamada em andamento
+    chamada em andamento
+    chamada em andamento
+    chamada em andamento
+    chamada em andamento
+    chamada em andamento
+    chamada em andamento
+    chamada em andamento
+    chamada em andamento
+    chamada em andamento
+    chamada em andamento
+    chamada em andamento
+    Preco: 0.500000
+    PID: 19466
+    Deseja começar uma chamada? (1 para ligar e 0 para nao ligar)
+    0
+
+Relatorio:
+    O código demonstra uma aplicação prática de sinais em sistemas operacionais para controle de eventos externos,
+    como início e fim de chamadas telefônicas. Através da combinação de loops, sinais e pausas temporais, 
+    o programa efetivamente calcula e exibe os custos de chamadas, mostrando como processos podem ser gerenciados e monitorados em background.
