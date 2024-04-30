@@ -1,0 +1,2 @@
+/home/tomas/PUC/SistemasOperacionais/Trabalho1/hello hello
+/home/tomas/PUC/SistemasOperacionais/Trabalho1/multM multM
