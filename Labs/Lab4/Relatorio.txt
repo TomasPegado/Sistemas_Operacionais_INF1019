@@ -1,0 +1,170 @@
+Nome: Tomás Lenzi
+Matrícula: 2220711
+
+Questão 1) Faça um programa para criar dois processos
+que se comunicam via pipe. O Pai lê do pipe
+enquanto o filho escreve no pipe. Exiba o resultado
+do que foi escrito e lido.
+
+    Código:
+
+        #include <stdio.h>
+        #include <string.h>
+        #include <stdlib.h>
+        #include <unistd.h>
+        #include <sys/wait.h>
+
+        int main(void)
+        {
+
+            int nDadosTx, nDadosRx; // quantidade de dados transmitidos/recebidos
+            int fd[2];              // descritor dos pipes
+            const char textoTX[] = "Dados para serem escritos no exercicio 1 do Lab4";
+            char textoRX[sizeof textoTX];
+            int filho, status;
+
+
+            if (pipe(fd) < 0)
+            {
+                puts("Erro ao abrir os pipes");
+                exit(-1);
+            }
+
+            filho = fork();
+            if (filho != 0){
+
+                waitpid(-1,&status,0);
+                printf("Filho terminado: %d\n", filho);
+                nDadosRx = read(fd[0], textoRX, sizeof textoRX);
+                printf("%d dados lidos: %s\n", nDadosRx, textoRX);
+                close(fd[0]);
+
+            } else {
+
+
+                printf("Filho Iniciado: %d\n", getpid());
+                nDadosTx = write(fd[1], textoTX, strlen(textoTX) + 1);
+                printf("%d dados escritos\n", nDadosTx);
+                close(fd[1]);
+
+            }
+            
+            return 0;
+        }
+
+    Linha de Comando p/ compilação e execução do programa:
+
+            gcc -Wall -o ex1 ex1.c
+            ./ex1
+    
+    Saida gerada:
+        Filho Iniciado: 2947
+        49 dados escritos
+        Filho terminado: 2947
+        49 dados lidos: Dados para serem escritos no exercicio 1 do Lab4
+
+Relatorio:
+    Este programa demonstra uma forma básica de comunicação entre processos usando pipes,
+    com um processo escrevendo dados em um pipe e o outro lendo esses dados após o término do primeiro.
+
+Questão 2) Faça um programa para redirecionar a entrada e
+a saída, lendo os dados de um arquivo e gerando
+a saída em outro
+
+    Código:
+        #include <stdio.h>
+        #include <stdlib.h>
+        #include <unistd.h>
+        #include <sys/types.h>
+        #include <sys/wait.h>
+        #include <fcntl.h>
+
+        int main(void)
+        {
+            int pipefd[2];
+            pid_t pid;
+            char buffer[1024];
+            int bytesLidos;
+
+            // Criar o pipe
+            if (pipe(pipefd) == -1)
+            {
+                perror("pipe");
+                exit(EXIT_FAILURE);
+            }
+
+            // Criar o processo filho
+            pid = fork();
+            if (pid == -1)
+            {
+                perror("fork");
+                exit(EXIT_FAILURE);
+            }
+
+            if (pid == 0)
+            {                     // Processo filho
+                close(pipefd[1]); // Fecha o lado de escrita do pipe não usado pelo filho
+
+                // Duplica o lado de leitura do pipe para o descritor de arquivo padrão de entrada (stdin)
+                dup2(pipefd[0], STDIN_FILENO);
+                close(pipefd[0]); // Fecha o pipe original
+
+                // Abre o arquivo de saída
+                int outFile = open("output.txt", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                if (outFile == -1)
+                {
+                    perror("open");
+                    exit(EXIT_FAILURE);
+                }
+
+                // Redireciona a saída padrão para o arquivo de saída
+                dup2(outFile, STDOUT_FILENO);
+                close(outFile);
+
+                // Lê da entrada padrão (agora ligada ao pipe) e escreve na saída padrão (agora ligada ao arquivo)
+                while ((bytesLidos = read(STDIN_FILENO, buffer, sizeof(buffer))) > 0)
+                {
+                    write(STDOUT_FILENO, buffer, bytesLidos);
+                }
+
+                exit(EXIT_SUCCESS);
+            }
+            else
+            {                     // Processo pai
+                close(pipefd[0]); // Fecha o lado de leitura do pipe não usado pelo pai
+
+                // Abre o arquivo de entrada
+                int inFile = open("input.txt", O_RDONLY);
+                if (inFile == -1)
+                {
+                    perror("open");
+                    exit(EXIT_FAILURE);
+                }
+
+                // Lê do arquivo e escreve no pipe
+                while ((bytesLidos = read(inFile, buffer, sizeof(buffer))) > 0)
+                {
+                    write(pipefd[1], buffer, bytesLidos);
+                }
+
+                close(inFile);
+                close(pipefd[1]); // Fecha o lado de escrita do pipe, indicando o fim dos dados
+
+                // Espera o processo filho terminar
+                wait(NULL);
+            }
+
+            return 0;
+        }
+
+    Linha de Comando p/ compilação e execução do programa:
+
+            gcc -Wall -o ex2 ex2.c
+            ./ex2
+    
+    Saida gerada:
+        Um novo arquivo chamado output.txt é criado com os dados do input.txt
+
+Relatorio:
+   Este código exemplifica uma abordagem prática para a comunicação entre processos,
+   utilizando redirecionamento de I/O para manipular dados entre arquivos em diferentes processos.
