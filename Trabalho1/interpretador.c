@@ -28,15 +28,12 @@ int main()
     }
     else if (pid == 0)
     {
-        // Código do processo escalonador
-        close(fd[1]); // Fecha o lado de escrita do pipe no escalonador
-        char buffer[BUFFER_SIZE];
-        while (read(fd[0], buffer, BUFFER_SIZE) > 0)
-        {
-            printf("Escalonador recebeu: %s\n", buffer);
-        }
-        close(fd[0]); // Fecha o lado de leitura do pipe
-        exit(0);
+        // Filho: executa o escalonador
+        close(fd[1]);              // Fecha o lado de escrita no filho
+        dup2(fd[0], STDIN_FILENO); // Redireciona a entrada padrão para ler do pipe
+        execlp("./escalonador", "escalonador", NULL);
+        perror("Falha ao executar o escalonador");
+        exit(1);
     }
     else
     {
