@@ -1,2 +1,2 @@
-/home/tomas/PUC/SistemasOperacionais/Trabalho1/hello hello
-/home/tomas/PUC/SistemasOperacionais/Trabalho1/multM multM
+hello-RT I=20 D=5
+multM-PRIO PR=1

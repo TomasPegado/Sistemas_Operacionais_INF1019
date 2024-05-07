@@ -1,48 +1,64 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/wait.h>
 #include <string.h>
-#include <sys/types.h>  
 #include <unistd.h>
+#include <sys/wait.h>
 
-int main() {
+#define BUFFER_SIZE 1024
+
+int main()
+{
     FILE *file;
-    char path[100];
-    char program[100];
-    char line[200];
-    int status;
+    char line[BUFFER_SIZE];
+    int fd[2]; // File descriptors para o pipe
 
-    file = fopen("/home/tomas/PUC/SistemasOperacionais/Trabalho1/programas.txt", "r");
-    if (file == NULL) {
-        perror("Error opening file");
-        return EXIT_FAILURE;
+    // Cria o pipe
+    if (pipe(fd) == -1)
+    {
+        perror("Falha ao criar o pipe");
+        return 1;
     }
 
-    while (fgets(line, sizeof(line), file)) {
-        if (sscanf(line, "%s %s", path, program) == 2) {
-            printf("Executing: %s %s\n", path, program);
-            int pid = fork();
-            if (pid != 0) { // Processo pai
-
-                waitpid(-1, &status, 0); // espera processo filho terminar
-		
-		        printf("\n Processo do pai finalizado \n");
-                
-            } else { // Processo filho
-
-                printf("\n Processo filho iniciado \n");
-                execl(path, program, (char *)NULL);
-                
-                perror("execl failed");
-                exit(EXIT_FAILURE);
-            }
-            // } else { // Error forking
-            //     perror("fork failed");
-            //     exit(EXIT_FAILURE);
-            // }
+    // Fork para criar o processo escalonador
+    pid_t pid = fork();
+    if (pid == -1)
+    {
+        perror("Falha no fork");
+        return 1;
+    }
+    else if (pid == 0)
+    {
+        // Código do processo escalonador
+        close(fd[1]); // Fecha o lado de escrita do pipe no escalonador
+        char buffer[BUFFER_SIZE];
+        while (read(fd[0], buffer, BUFFER_SIZE) > 0)
+        {
+            printf("Escalonador recebeu: %s\n", buffer);
         }
+        close(fd[0]); // Fecha o lado de leitura do pipe
+        exit(0);
+    }
+    else
+    {
+        // Código do processo interpretador
+        close(fd[0]); // Fecha o lado de leitura do pipe no interpretador
+        file = fopen("programas.txt", "r");
+        if (file == NULL)
+        {
+            perror("Falha ao abrir o arquivo");
+            return 1;
+        }
+
+        while (fgets(line, BUFFER_SIZE, file) != NULL)
+        {
+            write(fd[1], line, strlen(line)); // Envia linha para o escalonador
+            sleep(1);                         // Espera 1 segundo
+        }
+
+        fclose(file);
+        close(fd[1]); // Fecha o lado de escrita do pipe
+        wait(NULL);   // Espera o processo filho terminar
     }
 
-    fclose(file);
-    return EXIT_SUCCESS;
+    return 0;
 }
