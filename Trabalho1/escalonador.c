@@ -8,22 +8,37 @@
 #include <sys/time.h>
 
 #define MAX_CMD_LEN 1024
-#define MAX_RT_PROCESSES 100
+#define MAX_PROCESSES 100
+#define CYCLE_DURATION 60
 
 typedef struct
 {
-    char programName[100];
-    int start;
-    int duration;
-    pid_t pid;
-    timer_t timerid;
+    char programName[100]; // Nome do programa
+    int start;             // Segundo de início no ciclo de 60 segundos
+    int duration;          // Duração em segundos
+    pid_t pid;             // ID do processo
+    int endTime;           // Tempo de término calculado para controle
 } RealTimeProcess;
 
-RealTimeProcess rtProcesses[MAX_RT_PROCESSES];
+RealTimeProcess rtProcesses[MAX_PROCESSES];
 int rtCount = 0;
+int rtActive; // Flag para indicar se um processo REAL-TIME está ativo
+
+typedef struct
+{
+    char programName[100]; // Nome do programa
+    int priority;          // Prioridade do processo (1 é a mais alta, 7 é a mais baixa)
+    pid_t pid;             // ID do processo Unix do programa em execução
+    int active;            // Flag para indicar se o processo está ativo (1) ou pausado (0)
+    int finished;          // 0 para não terminado, 1 para terminado
+} PriorityProcess;
+
+PriorityProcess prioProcesses[MAX_PROCESSES];
+int prioCount = 0; // Número de processos de prioridade carregados
 
 int checkConflicts(int start, int duration)
 {
+
     for (int i = 0; i < rtCount; i++)
     {
         int end = rtProcesses[i].start + rtProcesses[i].duration;
@@ -36,85 +51,95 @@ int checkConflicts(int start, int duration)
     return 0; // Sem conflitos
 }
 
-void sigalrm_handler(int sig, siginfo_t *si, void *uc)
+void checkAndToggleProcesses(int currentSecond)
 {
-    timer_t *tidp = si->si_value.sival_ptr;
+
     for (int i = 0; i < rtCount; i++)
     {
-        if (rtProcesses[i].timerid == *tidp)
+        if (currentSecond == rtProcesses[i].start)
         {
+            // Inicia o processo se não estiver em execução
+            kill(rtProcesses[i].pid, SIGCONT);
+            printf("Processo %s iniciado.\n", rtProcesses[i].programName);
+            rtActive = 1; // Marca que um processo REAL-TIME está ativo
+
+            // Pausa todos os processos de prioridade que possam estar executando
+            for (int j = 0; j < prioCount; j++)
+            {
+                if (prioProcesses[j].active)
+                {
+                    kill(prioProcesses[j].pid, SIGSTOP);
+                    prioProcesses[j].active = 0;
+                    printf("Processo de prioridade %s pausado.\n", prioProcesses[j].programName);
+                }
+            }
+        }
+        if (currentSecond == rtProcesses[i].endTime)
+        {
+            // Pausa o processo
             kill(rtProcesses[i].pid, SIGSTOP);
+            rtActive = 0;
             printf("Processo %s pausado.\n", rtProcesses[i].programName);
-            break;
         }
     }
-}
 
-int setup_timer(int start, int duration, timer_t *timerid)
-{
-    struct sigevent sev;
-    struct itimerspec its;
-    struct sigaction sa;
-
-    sa.sa_flags = SA_SIGINFO;
-    sa.sa_sigaction = sigalrm_handler;
-    sigemptyset(&sa.sa_mask);
-    sigaction(SIGALRM, &sa, NULL);
-
-    sev.sigev_notify = SIGEV_SIGNAL;
-    sev.sigev_signo = SIGALRM;
-    sev.sigev_value.sival_ptr = timerid;
-    if (timer_create(CLOCK_REALTIME, &sev, timerid) == -1)
+    // Em seguida, verificar processos de prioridade se nenhum REAL-TIME estiver ativo
+    if (!rtActive)
     {
-        perror("timer_create");
-        return -1;
-    }
-
-    its.it_value.tv_sec = start + duration;
-    its.it_value.tv_nsec = 0;
-    its.it_interval.tv_sec = 0;
-    its.it_interval.tv_nsec = 0;
-    if (timer_settime(*timerid, 0, &its, NULL) == -1)
-    {
-        perror("timer_settime");
-        return -1;
-    }
-
-    return 0;
-}
-
-void scheduleRealTimeProcesses()
-{
-    while (1)
-    {
-        time_t currentTime = time(NULL);
-        struct tm *timeinfo = localtime(&currentTime);
-        int currentSecond = timeinfo->tm_sec;
-
-        for (int i = 0; i < rtCount; i++)
+        int highestPriority = 8; // Prioridade vai de 1 a 7, 8 significa sem processo ativo
+        int index = -1;
+        for (int i = 0; i < prioCount; i++)
         {
-            // Se o segundo atual corresponde ao início do processo, inicie ou continue o processo
-            if (currentSecond == rtProcesses[i].start)
+            if (!prioProcesses[i].finished && prioProcesses[i].priority < highestPriority)
             {
-                kill(rtProcesses[i].pid, SIGCONT);
-                printf("Processo %s iniciado ou continuado.\n", rtProcesses[i].programName);
-
-                // Agende a parada do processo após a duração especificada
-                struct itimerspec its;
-                its.it_value.tv_sec = rtProcesses[i].duration;
-                its.it_value.tv_nsec = 0;
-                its.it_interval.tv_sec = 0; // Não repetir automaticamente
-                its.it_interval.tv_nsec = 0;
-                timer_settime(rtProcesses[i].timerid, 0, &its, NULL);
+                highestPriority = prioProcesses[i].priority;
+                index = i;
             }
         }
 
-        // Espera até o próximo segundo para verificar novamente
-        struct timespec ts = {.tv_sec = 1, .tv_nsec = 0};
-        nanosleep(&ts, NULL);
+        if (index != -1)
+        {
+            // Se um processo de maior prioridade é encontrado e é diferente do atualmente ativo
+            for (int j = 0; j < prioCount; j++)
+            {
+                if (prioProcesses[j].active && j != index)
+                {
+                    kill(prioProcesses[j].pid, SIGSTOP); // Pausa o processo atualmente ativo
+                    prioProcesses[j].active = 0;
+                    printf("Processo de prioridade %s pausado.\n", prioProcesses[j].programName);
+                }
+            }
+
+            if (!prioProcesses[index].active)
+            {
+                kill(prioProcesses[index].pid, SIGCONT); // Inicia o processo de prioridade mais alta
+                prioProcesses[index].active = 1;
+                printf("Processo de prioridade %s iniciado.\n", prioProcesses[index].programName);
+            }
+        }
     }
 }
 
+void sigchld_handler(int sig)
+{
+    int status;
+    pid_t pid;
+
+    // Verifica todos os processos filho que terminaram
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0)
+    {
+        for (int i = 0; i < prioCount; i++)
+        {
+            if (prioProcesses[i].pid == pid)
+            {
+                prioProcesses[i].finished = 1; // Marca o processo como terminado
+                prioProcesses[i].active = 0;   // Marca o processo como inativo
+                printf("Processo de prioridade %s finalizado.\n", prioProcesses[i].programName);
+                break;
+            }
+        }
+    }
+}
 // Função para extrair valores de start e duration do RT
 void extract_values_RT(const char *buffer, int *start, int *duration)
 {
@@ -139,18 +164,30 @@ void extract_values_RT(const char *buffer, int *start, int *duration)
     }
 }
 
+void extract_values_PRIO(const char *buffer, int *priority)
+{
+
+    char *ptr;
+
+    *priority = -1;
+
+    ptr = strstr(buffer, "PR=");
+    if (ptr)
+    {
+        sscanf(ptr, "PR=%d", priority);
+    }
+}
+
 int main()
 {
+    // Configuração do manipulador de sinal para SIGCHLD
+    struct sigaction sa;
+    sa.sa_handler = sigchld_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+    sigaction(SIGCHLD, &sa, NULL);
     char buffer[MAX_CMD_LEN];
     char bufferCopy[MAX_CMD_LEN];
-
-    // Exemplo de configuração de um timer para um processo
-    if (rtCount < MAX_RT_PROCESSES)
-    {
-        // Configura e armazena informações do processo
-        setup_timer(rtProcesses[rtCount].start, rtProcesses[rtCount].duration, &rtProcesses[rtCount].timerid);
-        rtCount++;
-    }
 
     while (fgets(buffer, MAX_CMD_LEN, stdin) != NULL)
     {
@@ -167,6 +204,7 @@ int main()
         }
 
         if (strcmp(schedType, "RT") == 0)
+
         {
             int start, duration;
 
@@ -202,6 +240,7 @@ int main()
             strcpy(newProcess.programName, programName);
             newProcess.start = start;
             newProcess.duration = duration;
+            newProcess.endTime = start + duration;
             newProcess.pid = fork();
 
             if (newProcess.pid == 0)
@@ -211,14 +250,63 @@ int main()
                 execlp(execPath, programName, NULL);
                 exit(1);
             }
-            else if (newProcess.pid > 0)
-            {
-                kill(newProcess.pid, SIGSTOP); // Pausar imediatamente
+            else
+            { // Processo pai
+
+                kill(newProcess.pid, SIGSTOP); // Pausa imediatamente o processo
                 rtProcesses[rtCount++] = newProcess;
+            }
+        }
+
+        else if (strcmp(schedType, "PRIO") == 0)
+        {
+            int priority;
+            int active = 0;
+
+            // Chamada da função extract_values
+            extract_values_PRIO(bufferCopy, &priority);
+
+            // Verifica se os valores foram corretamente atribuídos
+            if (priority != -1)
+            {
+                printf("Programa: %s, Tipo de Escalonamento: %s\n", programName, schedType);
+                printf("Prioridade: %d, ativo: %d\n", priority, active);
+            }
+            else
+            {
+                printf("Erro ao extrair os dados de prioridade.\n");
+            }
+
+            // Armazena processo Prioridade
+            PriorityProcess newProcess;
+            strcpy(newProcess.programName, programName);
+            newProcess.priority = priority;
+            newProcess.active = active;
+            newProcess.finished = 0;
+            newProcess.pid = fork();
+
+            if (newProcess.pid == 0)
+            {
+                char execPath[1024];
+                snprintf(execPath, sizeof(execPath), "./%s", programName);
+                execlp(execPath, programName, NULL);
+                exit(1);
+            }
+            else
+            { // Processo pai
+
+                kill(newProcess.pid, SIGSTOP); // Pausa imediatamente o processo
+                prioProcesses[prioCount++] = newProcess;
             }
         }
     }
 
-    scheduleRealTimeProcesses(); // Agendar execução dos processos REAL-TIME
+    int currentSecond = 0;
+    while (1)
+    {
+        sleep(1); // Aguarda um segundo
+        checkAndToggleProcesses(currentSecond);
+        currentSecond = (currentSecond + 1) % CYCLE_DURATION; // Incrementa e reseta o contador a cada 60 segundos
+    }
     return 0;
 }
