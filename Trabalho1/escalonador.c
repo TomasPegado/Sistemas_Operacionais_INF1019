@@ -36,6 +36,17 @@ typedef struct
 PriorityProcess prioProcesses[MAX_PROCESSES];
 int prioCount = 0; // Número de processos de prioridade carregados
 
+typedef struct
+{
+    char programName[100]; // Nome do programa
+    int timeLeft;          // tempo restante na sua fatia
+    pid_t pid;
+} RoundRobinProcess;
+
+RoundRobinProcess rrProcesses[MAX_PROCESSES];
+int rrCount = 0; // Número de processos de round-robin carregados
+int currentRRIndex = 0;
+
 int checkConflicts(int start, int duration)
 {
 
@@ -63,14 +74,21 @@ void checkAndToggleProcesses(int currentSecond)
             printf("Processo %s iniciado.\n", rtProcesses[i].programName);
             rtActive = 1; // Marca que um processo REAL-TIME está ativo
 
-            // Pausa todos os processos de prioridade que possam estar executando
+            // Pausa todos os processos de prioridade e Round-Robin que possam estar executando
             for (int j = 0; j < prioCount; j++)
             {
                 if (prioProcesses[j].active)
                 {
                     kill(prioProcesses[j].pid, SIGSTOP);
                     prioProcesses[j].active = 0;
-                    printf("Processo de prioridade %s pausado.\n", prioProcesses[j].programName);
+                }
+            }
+            for (int k = 0; k < rrCount; k++)
+            {
+                if (rrProcesses[k].timeLeft > 0)
+                {
+                    kill(rrProcesses[k].pid, SIGSTOP);
+                    // rrProcesses[k].timeLeft = 3; // Reset do time slice
                 }
             }
         }
@@ -83,7 +101,7 @@ void checkAndToggleProcesses(int currentSecond)
         }
     }
 
-    // Em seguida, verificar processos de prioridade se nenhum REAL-TIME estiver ativo
+    // Em seguida, verificar processos de prioridade round-robin se nenhum REAL-TIME estiver ativo
     if (!rtActive)
     {
         int highestPriority = 8; // Prioridade vai de 1 a 7, 8 significa sem processo ativo
@@ -115,6 +133,27 @@ void checkAndToggleProcesses(int currentSecond)
                 kill(prioProcesses[index].pid, SIGCONT); // Inicia o processo de prioridade mais alta
                 prioProcesses[index].active = 1;
                 printf("Processo de prioridade %s iniciado.\n", prioProcesses[index].programName);
+            }
+        }
+        else if (rrCount > 0)
+        { // Se não há processos PRIO para executar, executa Round-Robin
+            if (rrProcesses[currentRRIndex].timeLeft > 0)
+            {
+                kill(rrProcesses[currentRRIndex].pid, SIGCONT);
+                rrProcesses[currentRRIndex].timeLeft--;
+
+                if (rrProcesses[currentRRIndex].timeLeft == 0)
+                {
+                    kill(rrProcesses[currentRRIndex].pid, SIGSTOP);
+                    currentRRIndex = (currentRRIndex + 1) % rrCount;
+                    rrProcesses[currentRRIndex].timeLeft = 3; // Reset do time slice
+                }
+            }
+            else
+            {
+                // Caso o tempo tenha acabado, troca para o próximo processo
+                currentRRIndex = (currentRRIndex + 1) % rrCount;
+                rrProcesses[currentRRIndex].timeLeft = 3; // Reset do time slice
             }
         }
     }
@@ -297,6 +336,30 @@ int main()
 
                 kill(newProcess.pid, SIGSTOP); // Pausa imediatamente o processo
                 prioProcesses[prioCount++] = newProcess;
+            }
+        }
+
+        else if (strcmp(schedType, "RR") == 0)
+        {
+
+            // Armazena processo Prioridade
+            RoundRobinProcess newProcess;
+            strcpy(newProcess.programName, programName);
+            newProcess.timeLeft = 3;
+            newProcess.pid = fork();
+
+            if (newProcess.pid == 0)
+            {
+                char execPath[1024];
+                snprintf(execPath, sizeof(execPath), "./%s", programName);
+                execlp(execPath, programName, NULL);
+                exit(1);
+            }
+            else
+            { // Processo pai
+
+                kill(newProcess.pid, SIGSTOP); // Pausa imediatamente o processo
+                rrProcesses[rrCount++] = newProcess;
             }
         }
     }
