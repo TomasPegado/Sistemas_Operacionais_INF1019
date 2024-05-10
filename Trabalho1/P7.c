@@ -2,12 +2,13 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-int main()
+int main(void)
 {
-    int n = 20;
+
+    int n = 10;
     while (n)
     {
-        printf("Executando P2 - Prioridade 2\n");
+        printf("Executando P7 - Prioridade 7\n");
         sleep(1);
         n--;
     }

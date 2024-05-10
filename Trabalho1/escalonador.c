@@ -35,6 +35,7 @@ typedef struct
 
 PriorityProcess prioProcesses[MAX_PROCESSES];
 int prioCount = 0; // Número de processos de prioridade carregados
+int prioFinished = 0;
 
 typedef struct
 {
@@ -173,6 +174,7 @@ void sigchld_handler(int sig)
             {
                 prioProcesses[i].finished = 1; // Marca o processo como terminado
                 prioProcesses[i].active = 0;   // Marca o processo como inativo
+                prioFinished += 1;
                 printf("Processo de prioridade %s finalizado.\n", prioProcesses[i].programName);
                 break;
             }
@@ -217,6 +219,28 @@ void extract_values_PRIO(const char *buffer, int *priority)
     }
 }
 
+void termination_handler(int sig)
+{
+    // Encerra todos os processos REAL-TIME
+    for (int i = 0; i < rtCount; i++)
+    {
+        if (rtProcesses[i].pid != 0)
+        { // Verifica se o PID é válido
+            kill(rtProcesses[i].pid, SIGTERM);
+            printf("Enviando SIGTERM para o processo REAL-TIME %s (PID: %d)\n", rtProcesses[i].programName, rtProcesses[i].pid);
+        }
+    }
+
+    // Encerra todos os processos Round-Robin
+    for (int i = 0; i < rrCount; i++)
+    {
+        if (rrProcesses[i].pid != 0)
+        { // Verifica se o PID é válido
+            kill(rrProcesses[i].pid, SIGTERM);
+            printf("Enviando SIGTERM para o processo Round-Robin %s (PID: %d)\n", rrProcesses[i].programName, rrProcesses[i].pid);
+        }
+    }
+}
 int main()
 {
     // Configuração do manipulador de sinal para SIGCHLD
@@ -227,6 +251,9 @@ int main()
     sigaction(SIGCHLD, &sa, NULL);
     char buffer[MAX_CMD_LEN];
     char bufferCopy[MAX_CMD_LEN];
+
+    // Configura o manipulador de sinal para SIGTERM usando signal()
+    signal(SIGTERM, termination_handler);
 
     while (fgets(buffer, MAX_CMD_LEN, stdin) != NULL)
     {
@@ -365,11 +392,29 @@ int main()
     }
 
     int currentSecond = 0;
-    while (1)
+    int active = 1;
+    while (active)
     {
         sleep(1); // Aguarda um segundo
         checkAndToggleProcesses(currentSecond);
         currentSecond = (currentSecond + 1) % CYCLE_DURATION; // Incrementa e reseta o contador a cada 60 segundos
+        printf("%d seg\n", currentSecond);
+        if (prioFinished == prioCount)
+        {
+            active = 0;
+        }
     }
+    printf("Programa finalizando em %d segundos.\n", 60 - currentSecond);
+    while ((60 - currentSecond) != 0)
+    {
+        sleep(1); // Aguarda um segundo
+        checkAndToggleProcesses(currentSecond);
+        currentSecond = (currentSecond + 1);
+        printf("%d seg\n", currentSecond);
+    }
+
+    // Enviar SIGTERM ao próprio processo para iniciar a limpeza e finalização
+    kill(getpid(), SIGTERM);
+
     return 0;
 }

@@ -5,7 +5,7 @@
 int main(void)
 {
 
-    int n = 5;
+    int n = 20;
     while (n)
     {
         printf("Executando P3 - Prioridade 1\n");
