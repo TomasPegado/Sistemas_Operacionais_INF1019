@@ -115,9 +115,34 @@ void scheduleRealTimeProcesses()
     }
 }
 
+// Função para extrair valores de start e duration do RT
+void extract_values_RT(const char *buffer, int *start, int *duration)
+{
+    char *ptr;
+
+    // Zera os valores para indicar falha na extração se necessário
+    *start = -1;
+    *duration = -1;
+
+    // Encontrar e extrair o valor de start
+    ptr = strstr(buffer, "I=");
+    if (ptr)
+    {
+        sscanf(ptr, "I=%d", start);
+    }
+
+    // Encontrar e extrair o valor de duration
+    ptr = strstr(buffer, "D=");
+    if (ptr)
+    {
+        sscanf(ptr, "D=%d", duration);
+    }
+}
+
 int main()
 {
     char buffer[MAX_CMD_LEN];
+    char bufferCopy[MAX_CMD_LEN];
 
     // Exemplo de configuração de um timer para um processo
     if (rtCount < MAX_RT_PROCESSES)
@@ -130,6 +155,7 @@ int main()
     while (fgets(buffer, MAX_CMD_LEN, stdin) != NULL)
     {
         buffer[strcspn(buffer, "\n")] = 0;
+        strcpy(bufferCopy, buffer); // Faz uma cópia do buffer antes de modificar
         printf("Escalonador recebeu: %s\n", buffer);
 
         char *programName = strtok(buffer, "-");
@@ -143,8 +169,22 @@ int main()
         if (strcmp(schedType, "RT") == 0)
         {
             int start, duration;
-            sscanf(buffer, "%*[^I]I=%d D=%d", &start, &duration);
 
+            // Chamada da função extract_values
+            extract_values_RT(bufferCopy, &start, &duration);
+            printf("Start: %d\n", start);
+            printf("Duration: %d\n", duration);
+
+            // Verifica se os valores foram corretamente atribuídos
+            if (start != -1 && duration != -1)
+            {
+                printf("Programa: %s, Tipo de Escalonamento: %s\n", programName, schedType);
+                printf("Start: %d, Duration: %d\n", start, duration);
+            }
+            else
+            {
+                printf("Erro ao extrair os dados de tempo.\n");
+            }
             if (start + duration > 60)
             {
                 fprintf(stderr, "Erro: período de execução vai além de 60 segundos.\n");
