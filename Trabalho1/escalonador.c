@@ -142,10 +142,12 @@ void checkAndToggleProcesses(int currentSecond)
             {
                 kill(rrProcesses[currentRRIndex].pid, SIGCONT);
                 rrProcesses[currentRRIndex].timeLeft--;
+                printf("Processo de Round-Robin %s iniciado.\n", rrProcesses[currentRRIndex].programName);
 
                 if (rrProcesses[currentRRIndex].timeLeft == 0)
                 {
                     kill(rrProcesses[currentRRIndex].pid, SIGSTOP);
+                    printf("Processo de Round-Robin %s pausado.\n", rrProcesses[currentRRIndex].programName);
                     currentRRIndex = (currentRRIndex + 1) % rrCount;
                     rrProcesses[currentRRIndex].timeLeft = 3; // Reset do time slice
                 }
@@ -241,6 +243,7 @@ void termination_handler(int sig)
         }
     }
 }
+
 int main()
 {
     // Configuração do manipulador de sinal para SIGCHLD
@@ -258,6 +261,10 @@ int main()
     while (fgets(buffer, MAX_CMD_LEN, stdin) != NULL)
     {
         buffer[strcspn(buffer, "\n")] = 0;
+        if (strlen(buffer) == 0)
+        {             // Verifica se a linha está vazia
+            continue; // Pula para a próxima iteração do loop
+        }
         strcpy(bufferCopy, buffer); // Faz uma cópia do buffer antes de modificar
         printf("Escalonador recebeu: %s\n", buffer);
 
