@@ -8,7 +8,7 @@ int main(void)
     int n = 300;
     while (n)
     {
-        printf("Executando P6 - Round Robin\n");
+        printf("Executando P6 - Real Time\n");
         sleep(1);
         n--;
     }
