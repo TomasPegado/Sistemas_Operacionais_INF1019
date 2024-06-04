@@ -5,10 +5,10 @@
 int main(void)
 {
 
-    int n = 10;
+    int n = 300;
     while (n)
     {
-        printf("Executando P7 - Prioridade 7\n");
+        printf("Executando P7 - Real Time\n");
         sleep(1);
         n--;
     }

@@ -252,8 +252,11 @@ int main()
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = SA_RESTART;
     sigaction(SIGCHLD, &sa, NULL);
+
+    
     char buffer[MAX_CMD_LEN];
     char bufferCopy[MAX_CMD_LEN];
+    int currentSecond = 0;
 
     // Configura o manipulador de sinal para SIGTERM usando signal()
     signal(SIGTERM, termination_handler);
@@ -326,8 +329,11 @@ int main()
             else
             { // Processo pai
 
-                kill(newProcess.pid, SIGSTOP); // Pausa imediatamente o processo
+                //kill(newProcess.pid, SIGSTOP); // Pausa imediatamente o processo
                 rtProcesses[rtCount++] = newProcess;
+                checkAndToggleProcesses(currentSecond);
+                currentSecond = (currentSecond + 1) % CYCLE_DURATION;
+                printf("%d seg\n", currentSecond);
             }
         }
 
@@ -368,8 +374,11 @@ int main()
             else
             { // Processo pai
 
-                kill(newProcess.pid, SIGSTOP); // Pausa imediatamente o processo
+               // kill(newProcess.pid, SIGSTOP); // Pausa imediatamente o processo
                 prioProcesses[prioCount++] = newProcess;
+                checkAndToggleProcesses(currentSecond);
+                currentSecond = (currentSecond + 1) % CYCLE_DURATION;
+                printf("%d seg\n", currentSecond);
             }
         }
 
@@ -392,13 +401,16 @@ int main()
             else
             { // Processo pai
 
-                kill(newProcess.pid, SIGSTOP); // Pausa imediatamente o processo
+                //kill(newProcess.pid, SIGSTOP); // Pausa imediatamente o processo
+                checkAndToggleProcesses(currentSecond);
+                currentSecond = (currentSecond + 1) % CYCLE_DURATION;
+                printf("%d seg\n", currentSecond);
                 rrProcesses[rrCount++] = newProcess;
             }
         }
     }
 
-    int currentSecond = 0;
+    
     int active = 1;
     while (active)
     {
