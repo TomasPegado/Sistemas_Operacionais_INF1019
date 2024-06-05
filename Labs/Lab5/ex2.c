@@ -41,24 +41,32 @@ int main(void)
             write(fwFifo, mensagem, strlen(mensagem));
             puts("Fim da escrita");
             close(fwFifo);
+            exit(0); // Garantir que o filho termine aqui
         }
         else
         {
-
+            // Processo pai
             if ((frFifo = open("segundaFifo", O_RDONLY | O_NONBLOCK)) < 0)
             {
                 fprintf(stderr, "Erro ao abrir a FIFO %s para leitura\n", "segundaFifo");
                 return -2;
             };
-            puts("Começando a ler...");
-            while (read(frFifo, &ch, sizeof(ch)) > 0)
-                putchar(ch);
-            puts("Fim da leitura");
         }
     }
 
-    while (waitpid(-1, &status, 0) != -1)
-        ;
+    // Espera pelos processos filhos terminarem
+    for (int i = 0; i < NUM_FILHOS; i++)
+    {
+        waitpid(-1, &status, 0);
+    }
+
+    puts("Começando a ler...");
+    while (read(frFifo, &ch, sizeof(ch)) > 0)
+        putchar(ch);
+    puts("Fim da leitura");
+
     close(frFifo);
+    // Remover a FIFO após o uso
+    unlink("segundaFifo");
     return 0;
 }
