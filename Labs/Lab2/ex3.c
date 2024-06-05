@@ -53,7 +53,7 @@ int main()
         {
 
             // waitpid(-1, &status, 0);
-            printf("Processo %d criado.\n",i+1);
+            printf("Processo %d criado.\n", i + 1);
         }
         else
         {
@@ -62,8 +62,8 @@ int main()
             procurar_chave(vetor, inicio, fim, chave, getpid(), p);
         }
     }
-    while (waitpid(-1,&status,0)!=-1);
-    
+    while (waitpid(-1, &status, 0) != -1)
+        ;
 
     printf("\nPosição %d salva no processo pai.\n", *p);
 
