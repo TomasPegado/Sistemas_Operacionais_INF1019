@@ -15,6 +15,7 @@ int main(void){
 
     int fwFifo; // Para escrever a mensagens
     int frFifo; // Para ler a resposta do servidor
+    int n = 5;
 
     if (access(WRITE, F_OK) == -1)
     {
@@ -52,6 +53,11 @@ int main(void){
     write(fwFifo, mensagem, strlen(mensagem));
     puts("Fim da escrita");
     close(fwFifo);
+
+    while(n){
+        sleep(1);
+        n--;
+    }
 
     puts("Começando a ler...");
     while (read (frFifo, resposta, sizeof(resposta)) > 0){

@@ -12,6 +12,7 @@ int main(void){
 
     char mensagem[] = "cliente b";
     char resposta[1024];
+    int n = 5;
 
     int fwFifo; // Para escrever a mensagens
     int frFifo; // Para ler a resposta do servidor
@@ -52,6 +53,11 @@ int main(void){
     write(fwFifo, mensagem, strlen(mensagem));
     puts("Fim da escrita");
     close(fwFifo);
+
+    while(n){
+        sleep(1);
+        n--;
+    }
 
     puts("Começando a ler...");
     while (read (frFifo, resposta, sizeof(resposta)) > 0){
