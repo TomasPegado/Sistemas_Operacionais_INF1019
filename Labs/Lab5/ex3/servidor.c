@@ -6,18 +6,17 @@
 #include <fcntl.h>
 #include <ctype.h>
 
-
-
 #define WRITE "fifoWrite"
 #define READ "fifoRead"
 
-void to_uppercase(char *str) {
-    while (*str) {
-        *str = toupper((unsigned char) *str);
+void to_uppercase(char *str)
+{
+    while (*str)
+    {
+        *str = toupper((unsigned char)*str);
         str++;
     }
 }
-
 
 int main(void)
 {
@@ -58,25 +57,27 @@ int main(void)
         fprintf(stderr, "Erro ao abrir a FIFO %s no Servidor\n", WRITE);
         return -2;
     }
-
-    
     puts("Começando a ler...");
-    while(1){
-        while ((num_bytes = read (frFifo, str, sizeof(str))) > 0)
-    {
-        // Assegura que a string lida está terminada com '\0'
-        str[num_bytes] = '\0';
-        puts("Começando a escrever...");
-        to_uppercase(str);
-        if (write(fwFifo, str, strlen(str)) < 0){
-            fprintf(stderr, "Erro ao escrever na FIFO\n");
-                return -2;
-        };
-        puts(str);
-        puts("Fim da escrita");
-    }
-    }
 
+    while (1)
+    {
+
+        while ((num_bytes = read(frFifo, str, sizeof(str))) > 0)
+        {
+            // Assegura que a string lida está terminada com '\0'
+            str[num_bytes] = '\0';
+            puts("Começando a escrever...");
+            to_uppercase(str);
+            if (write(fwFifo, str, strlen(str)) < 0)
+            {
+                fprintf(stderr, "Erro ao escrever na FIFO\n");
+                return -2;
+            };
+            puts(str);
+
+            puts("Fim da escrita");
+        }
+    }
 
     return 0;
 }
