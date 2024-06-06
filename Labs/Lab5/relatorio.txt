@@ -1,0 +1,538 @@
+Nome: Tomás Lenzi
+Matrícula: 2220711
+
+Questão 1) Abra duas seções de terminais
+Na primeira, execute um programa que fica em
+loop lendo de uma FIFO para depois escrever na
+saída padrão (tela)
+Na segunda, execute um programa que fica lendo
+da entrada padrão (teclado) e depois escreve na
+mesma FIFO 
+
+    Código Fonte:
+
+    ex1Leitura.c: //Esse é executado no primeiro terminal
+        #include <stdlib.h>
+        #include <unistd.h>
+        #include <sys/wait.h>
+        #include <fcntl.h>
+
+        #define OPENMODE (O_RDONLY | O_NONBLOCK)
+        #define FIFO "primeiraFifo"
+
+        int main(void)
+        {
+
+            int fpFIFO;
+            char ch;
+            int n = 15;
+            
+            puts("Abrindo FIFO");
+            if ((fpFIFO = open(FIFO, OPENMODE)) < 0)
+            {
+                fprintf(stderr, "Erro ao abrir a FIFO %s\n", FIFO);
+                return -2;
+            }
+
+            while(n){
+                sleep(1);
+                n--;
+            }
+            puts("Começando a ler...");
+            while (read (fpFIFO, &ch, sizeof(ch)) > 0){
+                putchar(ch);
+            }
+            puts("\n");
+            puts("Fim da leitura");
+            close(fpFIFO);
+            return 0;
+        }
+    
+    ex1Escrita.c: // Esse aqui é executado no segundo terminal e le da entrada padrão
+
+        #include <stdio.h>
+        #include <string.h>
+        #include <stdlib.h>
+        #include <unistd.h>
+        #include <sys/wait.h>
+        #include <fcntl.h>
+
+        #define OPENMODE (O_WRONLY | O_NONBLOCK)
+        #define FIFO "primeiraFifo"
+
+        int main(void)
+        {
+
+            char mensagem[1024];
+            scanf("%s", mensagem);
+
+
+            int fpFIFO;
+        
+            puts("Abrindo FIFO");
+            if ((fpFIFO = open(FIFO, OPENMODE)) < 0)
+            {
+                fprintf(stderr, "Erro ao abrir a FIFO %s\n", FIFO);
+                return -2;
+            }
+            puts("Começando a escrever...");
+            write(fpFIFO, mensagem, strlen(mensagem));
+            puts(mensagem);
+            puts("Fim da escrita");
+            close(fpFIFO);
+            return 0;
+        }
+
+    Linha de Comando p/ compilação e execução do programa:
+
+        Terminal 1:
+            mkfifo primeiraFifo
+            gcc -Wall -o ex1Leitura ex1Leitura.c
+            ./ex1Leitura
+        
+        Terminal 2:
+            gcc -Wall -o ex1Escrita ex1Escrita.c
+            ./ex1Escrita
+            Alou!
+    
+    Saída Gerada:
+
+        Terminal 1:
+            Abrindo FIFO
+            Começando a ler...
+            Alou!
+
+            Fim da leitura
+        
+        Terminal 2:
+            Abrindo FIFO
+            Começando a escrever...
+            Alou!
+            Fim da escrita
+    
+    Relatório:
+        Esses programas demonstram como dois processos podem se comunicar usando uma FIFO. 
+        O primeiro programa (leitor) lê dados de uma FIFO e os exibe na tela, 
+        enquanto o segundo programa (escritor) lê uma mensagem do teclado e a escreve na FIFO.
+
+Questão 2) Escreva um programa que primeiro cria
+uma FIFO e em seguida cria dois processos
+filho que escrevem uma string na FIFO.
+O pai dá um waitpid em seguida lê as
+strings desse FIFO e exibe na tela
+
+    Código Fonte:
+
+        #include <stdio.h>
+        #include <string.h>
+        #include <stdlib.h>
+        #include <unistd.h>
+        #include <sys/wait.h>
+        #include <fcntl.h>
+        #include <sys/types.h>
+
+        #define NUM_FILHOS 2
+
+        int main(void)
+        {
+
+            int status;
+            int fwFifo;
+            int frFifo;
+            char ch;
+            char mensagem[200] = "Processo Iniciado, PID = ";
+            char buffer[200];
+            if (access("segundaFifo", F_OK) == -1)
+            {
+                if (mkfifo("segundaFifo", S_IRUSR | S_IWUSR) != 0)
+                {
+                    fprintf(stderr, "Erro ao criar FIFO %s\n", "segundaFifo");
+                    return -1;
+                }
+            }
+
+            for (int i = 0; i < NUM_FILHOS; i++)
+            {
+
+                if (fork() != 0)
+                {
+
+                    // Concatena o PID à mensagem usando sprintf
+                    int pid = getpid();
+                    sprintf(buffer, "%s%d\n", mensagem, pid);
+
+                    printf("Abrindo FIFO para escrita no filho %d\n", pid);
+                    if ((fwFifo = open("segundaFifo", O_WRONLY | O_NONBLOCK)) < 0)
+                    {
+                        fprintf(stderr, "Erro ao abrir a FIFO %s para escrita\n", "segundaFifo");
+                        return -2;
+                    }
+                    puts("Começando a escrever...");
+                    write(fwFifo, buffer, strlen(buffer));
+                    puts("Fim da escrita");
+                    close(fwFifo);
+                    exit(0); // Garantir que o filho termine aqui
+                }
+                else
+                {
+                    // Processo pai
+                    if ((frFifo = open("segundaFifo", O_RDONLY | O_NONBLOCK)) < 0)
+                    {
+                        fprintf(stderr, "Erro ao abrir a FIFO %s para leitura\n", "segundaFifo");
+                        return -2;
+                    };
+                }
+            }
+
+            // Espera pelos processos filhos terminarem
+            for (int i = 0; i < NUM_FILHOS; i++)
+            {
+                waitpid(-1, &status, 0);
+            }
+
+            puts("Começando a ler...");
+            while (read(frFifo, &ch, sizeof(ch)) > 0)
+            {
+                putchar(ch);
+            }
+
+            puts("Fim da leitura");
+
+            close(frFifo);
+            // Remover a FIFO após o uso
+            unlink("segundaFifo");
+            return 0;
+        }
+    
+    Linha de Comando p/ compilação e execução do programa:
+
+        gcc -Wall -o ex2 ex2.c
+        ./ex2
+
+    Saída gerada:
+
+        Abrindo FIFO para escrita no filho 41255
+        Começando a escrever...
+        Fim da escrita
+        Abrindo FIFO para escrita no filho 41256
+        Começando a escrever...
+        Fim da escrita
+        Começando a ler...
+        Processo Iniciado, PID = 41255
+        Processo Iniciado, PID = 41256
+        Fim da leitura
+    
+    Relatório:
+
+        Este programa demonstra como criar uma FIFO e usar processos filhos para escrever dados na FIFO
+        enquanto o processo pai lê esses dados. Cada processo filho escreve uma mensagem contendo seu PID, 
+        que é então lida e exibida pelo processo pai. A implementação garante que a FIFO seja adequadamente criada, 
+        usada e limpa após o uso.
+
+Questão 3) Escreva um servidor e um cliente usando duas
+FIFOs: uma para enviar strings para o servidor,
+e outra para transmitir as respostas de volta
+para os clientes. O servidor deverá rodar em
+background e transformar cada palavra
+recebida de minusculas para maiúsculas.
+
+    Código Fonte:
+
+        servidor.c 
+            #include <stdio.h>
+            #include <string.h>
+            #include <stdlib.h>
+            #include <unistd.h>
+            #include <sys/wait.h>
+            #include <fcntl.h>
+            #include <ctype.h>
+
+            #define WRITE "fifoWrite"
+            #define READ "fifoRead"
+
+            void to_uppercase(char *str)
+            {
+                while (*str)
+                {
+                    *str = toupper((unsigned char)*str);
+                    str++;
+                }
+            }
+
+            int main(void)
+            {
+
+                int fwFifo; // Para escrever as respostas
+                int frFifo; // Para ler as strings enviadas pelos clientes
+                char str[1024];
+                int num_bytes;
+
+                if (access(WRITE, F_OK) == -1)
+                {
+                    if (mkfifo(WRITE, S_IRUSR | S_IWUSR) != 0)
+                    {
+                        fprintf(stderr, "Erro ao criar FIFO %s no Servidor\n", WRITE);
+                        return -1;
+                    }
+                }
+
+                if (access(READ, F_OK) == -1)
+                {
+                    if (mkfifo(READ, S_IRUSR | S_IWUSR) != 0)
+                    {
+                        fprintf(stderr, "Erro ao criar FIFO %s no Servidor\n", READ);
+                        return -1;
+                    }
+                }
+
+                puts("Abrindo FIFO de leitura no Servidor.\n");
+                if ((frFifo = open(READ, O_RDONLY | O_NONBLOCK)) < 0)
+                {
+                    fprintf(stderr, "Erro ao abrir a FIFO %s no Servidor\n", READ);
+                    return -2;
+                }
+
+                puts("Abrindo FIFO de escrita no Servidor.\n");
+                if ((fwFifo = open(WRITE, O_WRONLY)) < 0)
+                {
+                    fprintf(stderr, "Erro ao abrir a FIFO %s no Servidor\n", WRITE);
+                    return -2;
+                }
+                puts("Começando a ler...");
+
+                while (1)
+                {
+
+                    while ((num_bytes = read(frFifo, str, sizeof(str))) > 0)
+                    {
+                        // Assegura que a string lida está terminada com '\0'
+                        str[num_bytes] = '\0';
+                        puts("Começando a escrever...");
+                        to_uppercase(str);
+                        if (write(fwFifo, str, strlen(str)) < 0)
+                        {
+                            fprintf(stderr, "Erro ao escrever na FIFO\n");
+                            return -2;
+                        };
+                        puts(str);
+
+                        puts("Fim da escrita");
+                    }
+                }
+
+                return 0;
+            }
+
+        clienteA.c
+            #include <stdio.h>
+            #include <string.h>
+            #include <stdlib.h>
+            #include <unistd.h>
+            #include <sys/wait.h>
+            #include <fcntl.h>
+
+            #define WRITE "fifoRead"
+            #define READ "fifoWrite"
+
+            int main(void)
+            {
+
+                char mensagem[] = "cliente a";
+                char resposta[1024];
+                int num_bytes;
+
+                int fwFifo; // Para escrever a mensagens
+                int frFifo; // Para ler a resposta do servidor
+                int n = 5;
+
+                if (access(WRITE, F_OK) == -1)
+                {
+                    if (mkfifo(WRITE, S_IRUSR | S_IWUSR) != 0)
+                    {
+                        fprintf(stderr, "Erro ao criar FIFO %s no Cliente A\n", WRITE);
+                        return -1;
+                    }
+                }
+
+                if (access(READ, F_OK) == -1)
+                {
+                    if (mkfifo(READ, S_IRUSR | S_IWUSR) != 0)
+                    {
+                        fprintf(stderr, "Erro ao criar FIFO %s no Cliente A\n", READ);
+                        return -1;
+                    }
+                }
+
+                puts("Abrindo FIFO de leitura no Cliente A.\n");
+                if ((frFifo = open(READ, O_RDONLY | O_NONBLOCK)) < 0)
+                {
+                    fprintf(stderr, "Erro ao abrir a FIFO %s no Cliente A\n", READ);
+                    return -2;
+                }
+
+                puts("Abrindo FIFO de escrita no Cliente A.\n");
+                if ((fwFifo = open(WRITE, O_WRONLY)) < 0)
+                {
+                    fprintf(stderr, "Erro ao abrir a FIFO %s no Cliente A\n", WRITE);
+                    return -2;
+                }
+
+                puts("Começando a escrever...");
+                write(fwFifo, mensagem, strlen(mensagem));
+                puts("Fim da escrita");
+                close(fwFifo);
+
+                while (n)
+                {
+                    sleep(1);
+                    n--;
+                }
+
+                puts("Começando a ler...");
+                while ((num_bytes = read(frFifo, resposta, sizeof(resposta))) > 0)
+                {
+                    // Assegura que a string lida está terminada com '\0'
+                    resposta[num_bytes] = '\0';
+                    puts(resposta);
+                }
+                close(frFifo);
+                puts("Fim da leitura");
+
+                return 0;
+            }
+
+        clienteB.c
+            #include <stdio.h>
+            #include <string.h>
+            #include <stdlib.h>
+            #include <unistd.h>
+            #include <sys/wait.h>
+            #include <fcntl.h>
+
+            #define WRITE "fifoRead"
+            #define READ "fifoWrite"
+
+            int main(void)
+            {
+
+                char mensagem[] = "cliente b";
+                char resposta[1024];
+                int n = 5;
+                int num_bytes;
+
+                int fwFifo; // Para escrever a mensagens
+                int frFifo; // Para ler a resposta do servidor
+
+                if (access(WRITE, F_OK) == -1)
+                {
+                    if (mkfifo(WRITE, S_IRUSR | S_IWUSR) != 0)
+                    {
+                        fprintf(stderr, "Erro ao criar FIFO %s no Cliente B\n", WRITE);
+                        return -1;
+                    }
+                }
+
+                if (access(READ, F_OK) == -1)
+                {
+                    if (mkfifo(READ, S_IRUSR | S_IWUSR) != 0)
+                    {
+                        fprintf(stderr, "Erro ao criar FIFO %s no Cliente B\n", READ);
+                        return -1;
+                    }
+                }
+
+                puts("Abrindo FIFO de leitura no Cliente B.\n");
+                if ((frFifo = open(READ, O_RDONLY | O_NONBLOCK)) < 0)
+                {
+                    fprintf(stderr, "Erro ao abrir a FIFO %s no Cliente B\n", READ);
+                    return -2;
+                }
+
+                puts("Abrindo FIFO de escrita no Cliente B.\n");
+                if ((fwFifo = open(WRITE, O_WRONLY)) < 0)
+                {
+                    fprintf(stderr, "Erro ao abrir a FIFO %s no Cliente B\n", WRITE);
+                    return -2;
+                }
+
+                puts("Começando a escrever...");
+                write(fwFifo, mensagem, strlen(mensagem));
+                puts("Fim da escrita");
+                close(fwFifo);
+
+                while (n)
+                {
+                    sleep(1);
+                    n--;
+                }
+
+                puts("Começando a ler...");
+                while ((num_bytes = read(frFifo, resposta, sizeof(resposta))) > 0)
+                {
+                    // Assegura que a string lida está terminada com '\0'
+                    resposta[num_bytes] = '\0';
+                    puts(resposta);
+                }
+
+                close(frFifo);
+                puts("Fim da leitura");
+
+                return 0;
+            }
+    
+     Linha de Comando p/ compilação e execução do programa:
+
+        Terminal 1:
+            gcc -Wall -o servidor servidor.c
+            ./servidor
+        Terminal 2:
+            gcc -Wall -o clienteA clienteA.c
+            ./clienteA
+        Terminal 3:
+            gcc -Wall -o clienteB clienteB.c
+            ./clienteB
+        
+    Saída Gerada:
+
+        Terminal 1:
+            Abrindo FIFO de leitura no Servidor.
+
+            Abrindo FIFO de escrita no Servidor.
+
+            Começando a ler...
+            Começando a escrever...
+            CLIENTE A
+            Fim da escrita
+            Começando a escrever...
+            CLIENTE B
+            Fim da escrita
+        
+        Terminal 2:
+            Abrindo FIFO de leitura no Cliente A.
+
+            Abrindo FIFO de escrita no Cliente A.
+
+            Começando a escrever...
+            Fim da escrita
+            Começando a ler...
+            CLIENTE A
+            Fim da leitura
+
+        Terminal 3:
+            Abrindo FIFO de leitura no Cliente B.
+
+            Abrindo FIFO de escrita no Cliente B.
+
+            Começando a escrever...
+            Fim da escrita
+            Começando a ler...
+            CLIENTE B
+            Fim da leitura
+    
+    Relatório:
+
+    Estes programas demonstram como um servidor pode processar mensagens de clientes usando FIFOs para comunicação interprocessual. 
+    O servidor permanece em execução contínua, convertendo mensagens de minúsculas para maiúsculas e enviando as respostas de volta
+    aos clientes. Cada cliente envia uma mensagem ao servidor e recebe a resposta transformada, exibindo-a no terminal.
+    Importante notar, contudo, que se o clienteB for executado muito próximo e em seguida ao ClienteA, a resposta do ClienteB será
+    lida pelo Cliente A.

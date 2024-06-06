@@ -14,9 +14,8 @@ int main(void)
     char mensagem[1024];
     scanf("%s", mensagem);
 
-
     int fpFIFO;
-   
+
     puts("Abrindo FIFO");
     if ((fpFIFO = open(FIFO, OPENMODE)) < 0)
     {
@@ -26,6 +25,7 @@ int main(void)
     puts("Começando a escrever...");
     write(fpFIFO, mensagem, strlen(mensagem));
     puts(mensagem);
+
     puts("Fim da escrita");
     close(fpFIFO);
     return 0;
