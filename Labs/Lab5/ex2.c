@@ -15,7 +15,8 @@ int main(void)
     int fwFifo;
     int frFifo;
     char ch;
-    char mensagem[] = "escrita \n";
+    char mensagem[200] = "Processo Iniciado, PID = ";
+    char buffer[200];
     if (access("segundaFifo", F_OK) == -1)
     {
         if (mkfifo("segundaFifo", S_IRUSR | S_IWUSR) != 0)
@@ -31,14 +32,18 @@ int main(void)
         if (fork() != 0)
         {
 
-            printf("Abrindo FIFO para escrita no filho %d\n", getpid());
+            // Concatena o PID à mensagem usando sprintf
+            int pid = getpid();
+            sprintf(buffer, "%s%d\n", mensagem, pid);
+
+            printf("Abrindo FIFO para escrita no filho %d\n", pid);
             if ((fwFifo = open("segundaFifo", O_WRONLY | O_NONBLOCK)) < 0)
             {
                 fprintf(stderr, "Erro ao abrir a FIFO %s para escrita\n", "segundaFifo");
                 return -2;
             }
             puts("Começando a escrever...");
-            write(fwFifo, mensagem, strlen(mensagem));
+            write(fwFifo, buffer, strlen(buffer));
             puts("Fim da escrita");
             close(fwFifo);
             exit(0); // Garantir que o filho termine aqui
@@ -62,7 +67,10 @@ int main(void)
 
     puts("Começando a ler...");
     while (read(frFifo, &ch, sizeof(ch)) > 0)
+    {
         putchar(ch);
+    }
+
     puts("Fim da leitura");
 
     close(frFifo);

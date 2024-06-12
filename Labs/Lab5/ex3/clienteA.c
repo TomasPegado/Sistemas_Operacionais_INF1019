@@ -8,10 +8,12 @@
 #define WRITE "fifoRead"
 #define READ "fifoWrite"
 
-int main(void){
+int main(void)
+{
 
     char mensagem[] = "cliente a";
     char resposta[1024];
+    int num_bytes;
 
     int fwFifo; // Para escrever a mensagens
     int frFifo; // Para ler a resposta do servidor
@@ -54,16 +56,20 @@ int main(void){
     puts("Fim da escrita");
     close(fwFifo);
 
-    while(n){
+    while (n)
+    {
         sleep(1);
         n--;
     }
 
     puts("Começando a ler...");
-    while (read (frFifo, resposta, sizeof(resposta)) > 0){
+    while ((num_bytes = read(frFifo, resposta, sizeof(resposta))) > 0)
+    {
+        // Assegura que a string lida está terminada com '\0'
+        resposta[num_bytes] = '\0';
         puts(resposta);
     }
-        
+    close(frFifo);
     puts("Fim da leitura");
 
     return 0;
