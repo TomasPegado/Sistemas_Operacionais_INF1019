@@ -26,7 +26,7 @@ void *producer(void *arg) {
         buffer[in] = i;
         in = (in + 1) % MAXFILA;
         count++;
-        printf("Produced: %d\n", i);
+        printf("Produzido: %d\n", i);
         pthread_cond_signal(&not_empty);
         pthread_mutex_unlock(&mutex);
     }
@@ -43,7 +43,7 @@ void *consumer(void *arg) {
         int item = buffer[out];
         out = (out + 1) % MAXFILA;
         count--;
-        printf("Consumed: %d\n", item);
+        printf("Consumido: %d\n", item);
         pthread_cond_signal(&not_full);
         pthread_mutex_unlock(&mutex);
     }

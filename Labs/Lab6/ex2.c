@@ -1,7 +1,7 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h> // Para usar a função sleep
+#include <unistd.h> 
 
 #define NUM_THREADS 5
 #define PULO_MAXIMO 100
