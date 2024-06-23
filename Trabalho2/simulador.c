@@ -5,6 +5,7 @@
 #include <signal.h>
 #include <fcntl.h>
 #include <string.h>
+#include <time.h>
 
 #define NUM_PROCESSOS 3
 #define TEMPO_EXECUCAO 3
@@ -30,8 +31,17 @@ typedef struct
     int quadro[NUM_QUADROS];
 } MemoriaPrincipal;
 
+typedef struct
+{
+    int processo;
+    int pagina;
+    char operacao;
+} Mensagem;
+
 MemoriaPrincipal memoria;
 TabelaPagina tabelas[NUM_PROCESSOS];
+
+int page_faults_counter = 0;
 
 void inicializar_memoria()
 {
@@ -56,12 +66,97 @@ void inicializar_tabelas()
     }
 }
 
-void gerenciador(const char *mensagem)
+int notRecentlyUsed(int processo)
 {
-    printf("Gerenciador recebeu: %s\n", mensagem);
+
+    int classe[4][NUM_PAGINAS];
+    int count[4] = {0, 0, 0, 0};
+
+    // Classifica as páginas em classes
+    for (int i = 0; i < NUM_PAGINAS; i++)
+    {
+        if (tabelas[processo].paginas[i].presente)
+        {
+            int r = tabelas[processo].paginas[i].referenciado;
+            int m = tabelas[processo].paginas[i].modificado;
+            int classe_indice = 2 * r + m;
+            classe[classe_indice][count[classe_indice]++] = i;
+        }
+    }
+
+    // Encontra a classe mais baixa não vazia
+    for (int i = 0; i < 4; i++)
+    {
+        if (count[i] > 0)
+        {
+            int rand_index = rand() % count[i];
+            return classe[i][rand_index];
+        }
+    }
+
+    return -1; // não deve acontecer
 }
 
-void executar_processo(const char *nome_arquivo)
+void gerenciador(int processo, int pagina, char operacao, int politica, int *page_faults, pid_t pid)
+{
+    // Envia SIGSTOP para o processo
+    kill(pid, SIGSTOP);
+    // Atualiza bits de referência e modificação
+    tabelas[processo].paginas[pagina].referenciado = 1;
+    if (operacao == 'W')
+    {
+        tabelas[processo].paginas[pagina].modificado = 1;
+    }
+
+    // Se a página não está presente na memória, deve ser carregada
+    if (!tabelas[processo].paginas[pagina].presente)
+    {
+        printf("Page fault no processo %d, página %d\n", processo, pagina);
+        int quadro_vazio = -1;
+
+        // Procura um quadro vazio
+        for (int i = 0; i < NUM_QUADROS; i++)
+        {
+            if (memoria.quadro[i] == -1)
+            {
+                quadro_vazio = i;
+                break;
+            }
+        }
+
+        // Se não houver quadro vazio, aplica uma politica de substituição
+        if (quadro_vazio == -1)
+
+        {
+
+            *page_faults += 1;
+            if (politica == 1)
+            { // Aplica NRU
+                int pagina_para_substituir = notRecentlyUsed(processo);
+                quadro_vazio = tabelas[processo].paginas[pagina_para_substituir].quadro;
+                tabelas[processo].paginas[pagina_para_substituir].presente = 0;
+                memoria.quadro[quadro_vazio] = -1;
+                printf("Substituindo página %d do processo %d\n", pagina_para_substituir, processo);
+
+                if (tabelas[processo].paginas[pagina_para_substituir].modificado)
+                {
+                    printf("Cópia da página %d do processo %d para o disco de swap\n", pagina_para_substituir, processo);
+                }
+            }
+        }
+
+        // Carrega a nova página
+        tabelas[processo].paginas[pagina].quadro = quadro_vazio;
+        tabelas[processo].paginas[pagina].presente = 1;
+        memoria.quadro[quadro_vazio] = pagina;
+    }
+
+    printf("Processo %d, Página %d, Operação %c\n", processo, pagina, operacao);
+    // Envia SIGCONT para o processo
+    kill(pid, SIGCONT);
+}
+
+void executar_processo(const char *nome_arquivo, int processo, int write_fd)
 {
 
     FILE *arquivo = fopen(nome_arquivo, "r");
@@ -74,8 +169,12 @@ void executar_processo(const char *nome_arquivo)
     char linha[20];
     while (fgets(linha, sizeof(linha), arquivo))
     {
-        gerenciador(linha);
-        sleep(1); // Simula o tempo de processamento de cada acesso
+        int pagina;
+        char operacao;
+        sscanf(linha, "%d %c", &pagina, &operacao);
+        Mensagem msg = {processo, pagina, operacao};
+        write(write_fd, &msg, sizeof(Mensagem));
+        sleep(1); // Simular o acesso
     }
 
     fclose(arquivo);
@@ -120,6 +219,39 @@ void iteracao(int *politica, int *num_rodadas, int *parametroWS)
     }
 }
 
+void imprimir_tabelas_paginas()
+{
+    for (int p = 0; p < NUM_PROCESSOS; p++)
+    {
+        printf("Tabela de Páginas do Processo %d:\n", p);
+        printf("Página\tQuadro\tPresente\tReferenciado\tModificado\n");
+        for (int i = 0; i < NUM_PAGINAS; i++)
+        {
+            printf("%d\t%d\t%d\t\t%d\t\t%d\n", i, tabelas[p].paginas[i].quadro, tabelas[p].paginas[i].presente,
+                   tabelas[p].paginas[i].referenciado, tabelas[p].paginas[i].modificado);
+        }
+        printf("\n");
+    }
+}
+
+void imprimir_memoria()
+{
+    printf("Estado da Memória Principal:\n");
+    printf("Quadro\tPágina\n");
+    for (int i = 0; i < NUM_QUADROS; i++)
+    {
+        if (memoria.quadro[i] == -1)
+        {
+            printf("%d\tLivre\n", i);
+        }
+        else
+        {
+            printf("%d\t%d\n", i, memoria.quadro[i]);
+        }
+    }
+    printf("\n");
+}
+
 int main()
 {
 
@@ -127,20 +259,30 @@ int main()
     int num_rodadas;
     int parametroWS;
 
+    srand(time(NULL));
+
+    int pipes[NUM_PROCESSOS][2];
     pid_t pids[NUM_PROCESSOS];
     const char *arquivos[NUM_PROCESSOS] = {"acessos_P1.txt", "acessos_P2.txt", "acessos_P3.txt"};
 
     inicializar_memoria();
     inicializar_tabelas();
-
     iteracao(&politica, &num_rodadas, &parametroWS);
-    // Cria os processos filhos
+
+    // Cria os pipes e processos filhos
     for (int i = 0; i < NUM_PROCESSOS; i++)
     {
+        if (pipe(pipes[i]) == -1)
+        {
+            perror("Erro ao criar pipe");
+            exit(EXIT_FAILURE);
+        }
+
         if ((pids[i] = fork()) == 0)
         {
             // Código do processo filho
-            executar_processo(arquivos[i]);
+            close(pipes[i][0]); // Fecha o lado de leitura do pipe
+            executar_processo(arquivos[i], i, pipes[i][1]);
         }
         else if (pids[i] < 0)
         {
@@ -151,21 +293,33 @@ int main()
         { // Processo pai
 
             kill(pids[i], SIGSTOP);
+            close(pipes[i][1]); // Fecha o lado de escrita do pipe no processo pai
         }
     }
 
     // Round Robin entre os processos filhos
     int processos_ativos = NUM_PROCESSOS;
-    while (processos_ativos > 0)
+    int rodada_atual = 1;
+    while (processos_ativos > 0 && rodada_atual <= num_rodadas)
     {
         for (int i = 0; i < processos_ativos; i++)
         {
             if (pids[i] > 0)
             {
-                // Envia o sinal SIGCONT para continuar a execução do processo filho
-                kill(pids[i], SIGCONT);
-                printf("\nExecutando Processo %d\n", i);
-                sleep(TEMPO_EXECUCAO);
+                int n = 0;
+                while (n < TEMPO_EXECUCAO)
+                {
+                    // Envia o sinal SIGCONT para continuar a execução do processo filho
+                    kill(pids[i], SIGCONT);
+                    printf("\nExecutando Processo %d\n", i);
+                    // Ler mensagens do pipe
+                    Mensagem msg;
+                    read(pipes[i][0], &msg, sizeof(Mensagem));
+                    gerenciador(msg.processo, msg.pagina, msg.operacao, politica, &page_faults_counter, pids[i]);
+                    sleep(1);
+                    n++;
+                }
+
                 // Envia o sinal SIGSTOP para parar a execução do processo filho
                 kill(pids[i], SIGSTOP);
                 printf("\nProcesso %d interrompido\n", i);
@@ -182,8 +336,17 @@ int main()
                 }
             }
         }
+        printf("\nRodada atual: %d\n", rodada_atual);
+        rodada_atual++;
     }
 
-    printf("Todos os processos filhos terminaram.\n");
+    printf("Rodadas finalizadas.\n");
+    printf("%d Page Faults.\n", page_faults_counter);
+
+    // Imprime as tabelas de páginas de todos os processos
+    imprimir_tabelas_paginas();
+
+    // Imprime o estado da memória principal
+    imprimir_memoria();
     return 0;
 }
