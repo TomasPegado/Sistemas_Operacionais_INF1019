@@ -230,7 +230,7 @@ int working_set(int processo, int k)
 
     return pagina_para_substituir;
 }
-void gerenciador(int processo, int pagina, char operacao, int politica, int *page_faults, pid_t pid, int k)
+void gerenciador(int processo, int pagina, char operacao, int politica, pid_t pid, int k)
 {
     global_time++;
     // Envia SIGSTOP para o processo
@@ -269,29 +269,25 @@ void gerenciador(int processo, int pagina, char operacao, int politica, int *pag
 
         {
 
-            *page_faults += 1;
+            page_faults_counter += 1;
             int pagina_para_substituir;
             if (politica == 1)
             { // Aplica NRU
                 pagina_para_substituir = notRecentlyUsed(processo);
-                quadro_vazio = tabelas[processo].paginas[pagina_para_substituir].quadro;
             }
             else if (politica == 2)
             { // Aplica Segunda Chance
                 pagina_para_substituir = segunda_chance(processo);
-                quadro_vazio = tabelas[processo].paginas[pagina_para_substituir].quadro;
             }
             else if (politica == 3)
             { // Aplica LRU/Aging
 
                 pagina_para_substituir = lru_aging(processo);
-                quadro_vazio = tabelas[processo].paginas[pagina_para_substituir].quadro;
             }
             else if (politica == 4)
             { // Aplica WorkingSet (k)
 
                 pagina_para_substituir = working_set(processo, k);
-                quadro_vazio = tabelas[processo].paginas[pagina_para_substituir].quadro;
             }
             else
             {
@@ -299,6 +295,7 @@ void gerenciador(int processo, int pagina, char operacao, int politica, int *pag
                 exit(EXIT_FAILURE);
             }
 
+            quadro_vazio = tabelas[processo].paginas[pagina_para_substituir].quadro;
             tabelas[processo].paginas[pagina_para_substituir].presente = 0;
             tabelas[processo].paginas[pagina_para_substituir].quadro = -1;
             printf("Substituindo página %d do processo %d\n", pagina_para_substituir, processo);
@@ -490,7 +487,7 @@ int main()
                     // Ler mensagens do pipe
                     Mensagem msg;
                     read(pipes[i][0], &msg, sizeof(Mensagem));
-                    gerenciador(msg.processo, msg.pagina, msg.operacao, politica, &page_faults_counter, pids[i], parametroWS);
+                    gerenciador(msg.processo, msg.pagina, msg.operacao, politica, pids[i], parametroWS);
                     sleep(1);
                     n++;
                 }
