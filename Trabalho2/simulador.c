@@ -24,6 +24,10 @@ typedef struct
 typedef struct
 {
     EntradaTabelaPagina paginas[NUM_PAGINAS];
+    int fila[NUM_PAGINAS];
+    int front;
+    int rear;
+    int num_elementos;
 } TabelaPagina;
 
 typedef struct
@@ -51,7 +55,7 @@ void inicializar_memoria()
     }
 }
 
-void inicializar_tabelas()
+void inicializar_tabelas(int politica)
 {
     for (int p = 0; p < NUM_PROCESSOS; p++)
     {
@@ -62,6 +66,12 @@ void inicializar_tabelas()
             tabelas[p].paginas[i].referenciado = 0;
             tabelas[p].paginas[i].modificado = 0;
             tabelas[p].paginas[i].contador = 0;
+        }
+        if (politica == 2)
+        {
+            tabelas[p].front = 0;
+            tabelas[p].rear = -1;
+            tabelas[p].num_elementos = 0;
         }
     }
 }
@@ -97,6 +107,33 @@ int notRecentlyUsed(int processo)
     return -1; // não deve acontecer
 }
 
+// Algoritmo Seunda Chance
+void adicionar_na_fila(int processo, int pagina)
+{
+    tabelas[processo].rear = (tabelas[processo].rear + 1) % NUM_PAGINAS;
+    tabelas[processo].fila[tabelas[processo].rear] = pagina;
+    tabelas[processo].num_elementos++;
+}
+
+int segunda_chance(int processo)
+{
+    while (1)
+    {
+        int pagina = tabelas[processo].fila[tabelas[processo].front];
+        if (tabelas[processo].paginas[pagina].referenciado == 0)
+        {
+            tabelas[processo].front = (tabelas[processo].front + 1) % NUM_PAGINAS;
+            tabelas[processo].num_elementos--;
+            return pagina;
+        }
+        else
+        {
+            tabelas[processo].paginas[pagina].referenciado = 0;
+            tabelas[processo].front = (tabelas[processo].front + 1) % NUM_PAGINAS;
+            adicionar_na_fila(processo, pagina);
+        }
+    }
+}
 void gerenciador(int processo, int pagina, char operacao, int politica, int *page_faults, pid_t pid)
 {
     // Envia SIGSTOP para o processo
@@ -130,18 +167,31 @@ void gerenciador(int processo, int pagina, char operacao, int politica, int *pag
         {
 
             *page_faults += 1;
+            int pagina_para_substituir;
             if (politica == 1)
             { // Aplica NRU
-                int pagina_para_substituir = notRecentlyUsed(processo);
+                pagina_para_substituir = notRecentlyUsed(processo);
                 quadro_vazio = tabelas[processo].paginas[pagina_para_substituir].quadro;
-                tabelas[processo].paginas[pagina_para_substituir].presente = 0;
-                memoria.quadro[quadro_vazio] = -1;
-                printf("Substituindo página %d do processo %d\n", pagina_para_substituir, processo);
+            }
+            else if (politica == 2)
+            { // Aplica Segunda Chance
+                pagina_para_substituir = segunda_chance(processo);
+                quadro_vazio = tabelas[processo].paginas[pagina_para_substituir].quadro;
+            }
+            else
+            {
+                perror("Politica Invalida");
+                exit(EXIT_FAILURE);
+            }
 
-                if (tabelas[processo].paginas[pagina_para_substituir].modificado)
-                {
-                    printf("Cópia da página %d do processo %d para o disco de swap\n", pagina_para_substituir, processo);
-                }
+            tabelas[processo].paginas[pagina_para_substituir].presente = 0;
+            memoria.quadro[quadro_vazio] = -1;
+            tabelas[processo].paginas[pagina_para_substituir].quadro = -1;
+            printf("Substituindo página %d do processo %d\n", pagina_para_substituir, processo);
+
+            if (tabelas[processo].paginas[pagina_para_substituir].modificado)
+            {
+                printf("Cópia da página %d do processo %d para o disco de swap\n", pagina_para_substituir, processo);
             }
         }
 
@@ -149,6 +199,9 @@ void gerenciador(int processo, int pagina, char operacao, int politica, int *pag
         tabelas[processo].paginas[pagina].quadro = quadro_vazio;
         tabelas[processo].paginas[pagina].presente = 1;
         memoria.quadro[quadro_vazio] = pagina;
+
+        if (politica == 2)
+            adicionar_na_fila(processo, pagina);
     }
 
     printf("Processo %d, Página %d, Operação %c\n", processo, pagina, operacao);
@@ -265,9 +318,9 @@ int main()
     pid_t pids[NUM_PROCESSOS];
     const char *arquivos[NUM_PROCESSOS] = {"acessos_P1.txt", "acessos_P2.txt", "acessos_P3.txt"};
 
-    inicializar_memoria();
-    inicializar_tabelas();
     iteracao(&politica, &num_rodadas, &parametroWS);
+    inicializar_memoria();
+    inicializar_tabelas(politica);
 
     // Cria os pipes e processos filhos
     for (int i = 0; i < NUM_PROCESSOS; i++)
