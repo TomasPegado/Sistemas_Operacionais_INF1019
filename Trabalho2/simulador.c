@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <time.h>
+#include <limits.h>
 
 #define NUM_PROCESSOS 3
 #define TEMPO_EXECUCAO 3
@@ -18,7 +19,7 @@ typedef struct
     int presente;
     int referenciado;
     int modificado;
-    int contador;
+    unsigned int contador; // Contador para Aging
 } EntradaTabelaPagina;
 
 typedef struct
@@ -76,6 +77,7 @@ void inicializar_tabelas(int politica)
     }
 }
 
+// NRU
 int notRecentlyUsed(int processo)
 {
 
@@ -134,6 +136,41 @@ int segunda_chance(int processo)
         }
     }
 }
+
+// LRU/Aging
+void atualizar_contadores(int processo)
+{
+    for (int i = 0; i < NUM_PAGINAS; i++)
+    {
+        if (tabelas[processo].paginas[i].presente)
+        {
+            tabelas[processo].paginas[i].contador >>= 1;
+            if (tabelas[processo].paginas[i].referenciado)
+            {
+                tabelas[processo].paginas[i].contador |= (1 << (sizeof(unsigned int) * 8 - 1));
+                tabelas[processo].paginas[i].referenciado = 0;
+            }
+        }
+    }
+}
+
+int lru_aging(int processo)
+{
+    int pagina_para_substituir = -1;
+    unsigned int menor_contador = UINT_MAX;
+
+    for (int i = 0; i < NUM_PAGINAS; i++)
+    {
+        if (tabelas[processo].paginas[i].presente && tabelas[processo].paginas[i].contador < menor_contador)
+        {
+            menor_contador = tabelas[processo].paginas[i].contador;
+            pagina_para_substituir = i;
+        }
+    }
+
+    return pagina_para_substituir;
+}
+
 void gerenciador(int processo, int pagina, char operacao, int politica, int *page_faults, pid_t pid)
 {
     // Envia SIGSTOP para o processo
@@ -178,6 +215,12 @@ void gerenciador(int processo, int pagina, char operacao, int politica, int *pag
                 pagina_para_substituir = segunda_chance(processo);
                 quadro_vazio = tabelas[processo].paginas[pagina_para_substituir].quadro;
             }
+            else if (politica == 3)
+            { // Aplica LRU/Aging
+
+                pagina_para_substituir = lru_aging(processo);
+                quadro_vazio = tabelas[processo].paginas[pagina_para_substituir].quadro;
+            }
             else
             {
                 perror("Politica Invalida");
@@ -185,7 +228,6 @@ void gerenciador(int processo, int pagina, char operacao, int politica, int *pag
             }
 
             tabelas[processo].paginas[pagina_para_substituir].presente = 0;
-            memoria.quadro[quadro_vazio] = -1;
             tabelas[processo].paginas[pagina_para_substituir].quadro = -1;
             printf("Substituindo página %d do processo %d\n", pagina_para_substituir, processo);
 
@@ -201,10 +243,18 @@ void gerenciador(int processo, int pagina, char operacao, int politica, int *pag
         memoria.quadro[quadro_vazio] = pagina;
 
         if (politica == 2)
+        {
             adicionar_na_fila(processo, pagina);
+        }
     }
 
     printf("Processo %d, Página %d, Operação %c\n", processo, pagina, operacao);
+
+    if (politica == 3)
+    {
+        // Atualiza os contadores após o gerenciamento da página
+        atualizar_contadores(processo);
+    }
     // Envia SIGCONT para o processo
     kill(pid, SIGCONT);
 }
@@ -277,11 +327,11 @@ void imprimir_tabelas_paginas()
     for (int p = 0; p < NUM_PROCESSOS; p++)
     {
         printf("Tabela de Páginas do Processo %d:\n", p);
-        printf("Página\tQuadro\tPresente\tReferenciado\tModificado\n");
+        printf("Página\tQuadro\tPresente\tReferenciado\tModificado\tContador\n");
         for (int i = 0; i < NUM_PAGINAS; i++)
         {
-            printf("%d\t%d\t%d\t\t%d\t\t%d\n", i, tabelas[p].paginas[i].quadro, tabelas[p].paginas[i].presente,
-                   tabelas[p].paginas[i].referenciado, tabelas[p].paginas[i].modificado);
+            printf("%d\t%d\t%d\t\t%d\t\t%d\t\t%u\n", i, tabelas[p].paginas[i].quadro, tabelas[p].paginas[i].presente,
+                   tabelas[p].paginas[i].referenciado, tabelas[p].paginas[i].modificado, tabelas[p].paginas[i].contador);
         }
         printf("\n");
     }
