@@ -20,6 +20,7 @@ typedef struct
     int referenciado;
     int modificado;
     unsigned int contador; // Contador para Aging
+    unsigned long timestamp;
 } EntradaTabelaPagina;
 
 typedef struct
@@ -29,6 +30,10 @@ typedef struct
     int front;
     int rear;
     int num_elementos;
+    int working_set[NUM_PAGINAS];
+    int ws_front;
+    int ws_rear;
+    int ws_count;
 } TabelaPagina;
 
 typedef struct
@@ -45,7 +50,7 @@ typedef struct
 
 MemoriaPrincipal memoria;
 TabelaPagina tabelas[NUM_PROCESSOS];
-
+unsigned long global_time = 0;
 int page_faults_counter = 0;
 
 void inicializar_memoria()
@@ -73,6 +78,12 @@ void inicializar_tabelas(int politica)
             tabelas[p].front = 0;
             tabelas[p].rear = -1;
             tabelas[p].num_elementos = 0;
+        }
+        else if (politica == 3)
+        {
+            tabelas[p].ws_front = 0;
+            tabelas[p].ws_rear = -1;
+            tabelas[p].ws_count = 0;
         }
     }
 }
@@ -171,8 +182,57 @@ int lru_aging(int processo)
     return pagina_para_substituir;
 }
 
-void gerenciador(int processo, int pagina, char operacao, int politica, int *page_faults, pid_t pid)
+// WorkingSet (k)
+void atualizar_historico(int processo, int pagina, int k)
 {
+    // Atualiza o histórico de referências para o working set
+    tabelas[processo].paginas[pagina].timestamp = global_time;
+
+    if (tabelas[processo].ws_count < k)
+    {
+        tabelas[processo].ws_rear = (tabelas[processo].ws_rear + 1) % k;
+        tabelas[processo].working_set[tabelas[processo].ws_rear] = pagina;
+        tabelas[processo].ws_count++;
+    }
+    else
+    {
+        tabelas[processo].ws_front = (tabelas[processo].ws_front + 1) % k;
+        tabelas[processo].ws_rear = (tabelas[processo].ws_rear + 1) % k;
+        tabelas[processo].working_set[tabelas[processo].ws_rear] = pagina;
+    }
+}
+
+int working_set(int processo, int k)
+{
+    int pagina_para_substituir = -1;
+    unsigned long oldest_time = ULONG_MAX;
+
+    for (int i = 0; i < NUM_PAGINAS; i++)
+    {
+        if (tabelas[processo].paginas[i].presente && tabelas[processo].paginas[i].timestamp < oldest_time)
+        {
+            int found = 0;
+            for (int j = 0; j < tabelas[processo].ws_count; j++)
+            {
+                if (tabelas[processo].working_set[(tabelas[processo].ws_front + j) % k] == i)
+                {
+                    found = 1;
+                    break;
+                }
+            }
+            if (!found)
+            {
+                oldest_time = tabelas[processo].paginas[i].timestamp;
+                pagina_para_substituir = i;
+            }
+        }
+    }
+
+    return pagina_para_substituir;
+}
+void gerenciador(int processo, int pagina, char operacao, int politica, int *page_faults, pid_t pid, int k)
+{
+    global_time++;
     // Envia SIGSTOP para o processo
     kill(pid, SIGSTOP);
     // Atualiza bits de referência e modificação
@@ -180,6 +240,12 @@ void gerenciador(int processo, int pagina, char operacao, int politica, int *pag
     if (operacao == 'W')
     {
         tabelas[processo].paginas[pagina].modificado = 1;
+    }
+
+    if (politica == 4)
+    {
+        // Atualiza o histórico de referências
+        atualizar_historico(processo, pagina, k);
     }
 
     // Se a página não está presente na memória, deve ser carregada
@@ -219,6 +285,12 @@ void gerenciador(int processo, int pagina, char operacao, int politica, int *pag
             { // Aplica LRU/Aging
 
                 pagina_para_substituir = lru_aging(processo);
+                quadro_vazio = tabelas[processo].paginas[pagina_para_substituir].quadro;
+            }
+            else if (politica == 4)
+            { // Aplica WorkingSet (k)
+
+                pagina_para_substituir = working_set(processo, k);
                 quadro_vazio = tabelas[processo].paginas[pagina_para_substituir].quadro;
             }
             else
@@ -327,11 +399,11 @@ void imprimir_tabelas_paginas()
     for (int p = 0; p < NUM_PROCESSOS; p++)
     {
         printf("Tabela de Páginas do Processo %d:\n", p);
-        printf("Página\tQuadro\tPresente\tReferenciado\tModificado\tContador\n");
+        printf("Página\tQuadro\tPresente\tReferenciado\tModificado\tContador\tTimestamp\n");
         for (int i = 0; i < NUM_PAGINAS; i++)
         {
-            printf("%d\t%d\t%d\t\t%d\t\t%d\t\t%u\n", i, tabelas[p].paginas[i].quadro, tabelas[p].paginas[i].presente,
-                   tabelas[p].paginas[i].referenciado, tabelas[p].paginas[i].modificado, tabelas[p].paginas[i].contador);
+            printf("%d\t%d\t%d\t\t%d\t\t%d\t\t%u\t\t%lu\n", i, tabelas[p].paginas[i].quadro, tabelas[p].paginas[i].presente,
+                   tabelas[p].paginas[i].referenciado, tabelas[p].paginas[i].modificado, tabelas[p].paginas[i].contador, tabelas[p].paginas[i].timestamp);
         }
         printf("\n");
     }
@@ -360,7 +432,7 @@ int main()
 
     int politica;
     int num_rodadas;
-    int parametroWS;
+    int parametroWS = 0;
 
     srand(time(NULL));
 
@@ -418,7 +490,7 @@ int main()
                     // Ler mensagens do pipe
                     Mensagem msg;
                     read(pipes[i][0], &msg, sizeof(Mensagem));
-                    gerenciador(msg.processo, msg.pagina, msg.operacao, politica, &page_faults_counter, pids[i]);
+                    gerenciador(msg.processo, msg.pagina, msg.operacao, politica, &page_faults_counter, pids[i], parametroWS);
                     sleep(1);
                     n++;
                 }
