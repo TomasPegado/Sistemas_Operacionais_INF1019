@@ -19,8 +19,8 @@ typedef struct
     int presente;
     int referenciado;
     int modificado;
-    unsigned int contador; // Contador para Aging
-    unsigned long timestamp;
+    unsigned int contador;   // Contador para Aging
+    unsigned long timestamp; // Marca o tempo de referência da página, usado para determinar se a página está no working set.
 } EntradaTabelaPagina;
 
 typedef struct
@@ -95,7 +95,7 @@ int notRecentlyUsed(int processo)
     int classe[4][NUM_PAGINAS];
     int count[4] = {0, 0, 0, 0};
 
-    // Classifica as páginas em classes
+    // Classifica as páginas em classes - preferência para as referenciadas
     for (int i = 0; i < NUM_PAGINAS; i++)
     {
         if (tabelas[processo].paginas[i].presente)
@@ -120,7 +120,7 @@ int notRecentlyUsed(int processo)
     return -1; // não deve acontecer
 }
 
-// Algoritmo Seunda Chance
+// Algoritmo Segunda Chance
 void adicionar_na_fila(int processo, int pagina)
 {
     tabelas[processo].rear = (tabelas[processo].rear + 1) % NUM_PAGINAS;
@@ -132,16 +132,20 @@ int segunda_chance(int processo)
 {
     while (1)
     {
+        // Obtém a página na frente da fila
         int pagina = tabelas[processo].fila[tabelas[processo].front];
-        if (tabelas[processo].paginas[pagina].referenciado == 0)
+        if (tabelas[processo].paginas[pagina].referenciado == 0) // Verifica o bit de referencia
         {
+            // Se o bit de referência for 0, a página é substituída
             tabelas[processo].front = (tabelas[processo].front + 1) % NUM_PAGINAS;
             tabelas[processo].num_elementos--;
             return pagina;
         }
         else
         {
+            // Se o bit de referência for 1, a página recebe uma segunda chance
             tabelas[processo].paginas[pagina].referenciado = 0;
+            // Move a página para o final da fila
             tabelas[processo].front = (tabelas[processo].front + 1) % NUM_PAGINAS;
             adicionar_na_fila(processo, pagina);
         }
@@ -155,9 +159,10 @@ void atualizar_contadores(int processo)
     {
         if (tabelas[processo].paginas[i].presente)
         {
+            // Desloca o contador para a direita
             tabelas[processo].paginas[i].contador >>= 1;
             if (tabelas[processo].paginas[i].referenciado)
-            {
+            { // Se a página foi referenciada, define o bit mais significativo do contador
                 tabelas[processo].paginas[i].contador |= (1 << (sizeof(unsigned int) * 8 - 1));
                 tabelas[processo].paginas[i].referenciado = 0;
             }
@@ -168,10 +173,11 @@ void atualizar_contadores(int processo)
 int lru_aging(int processo)
 {
     int pagina_para_substituir = -1;
-    unsigned int menor_contador = UINT_MAX;
+    unsigned int menor_contador = UINT_MAX; // Inicializa menor_contador com o valor máximo possível (UINT_MAX).
 
     for (int i = 0; i < NUM_PAGINAS; i++)
     {
+        // Verifica se a página está presente na memória e se tem o menor contador
         if (tabelas[processo].paginas[i].presente && tabelas[processo].paginas[i].contador < menor_contador)
         {
             menor_contador = tabelas[processo].paginas[i].contador;
@@ -185,9 +191,10 @@ int lru_aging(int processo)
 // WorkingSet (k)
 void atualizar_historico(int processo, int pagina, int k)
 {
-    // Atualiza o histórico de referências para o working set
+    // Atualiza o timestamp da página referenciada
     tabelas[processo].paginas[pagina].timestamp = global_time;
 
+    // Se o working set não está cheio, adiciona a página ao working set
     if (tabelas[processo].ws_count < k)
     {
         tabelas[processo].ws_rear = (tabelas[processo].ws_rear + 1) % k;
@@ -196,7 +203,9 @@ void atualizar_historico(int processo, int pagina, int k)
     }
     else
     {
+        // Se o working set está cheio, remove a página mais antiga (front)
         tabelas[processo].ws_front = (tabelas[processo].ws_front + 1) % k;
+        // Adiciona a nova página na posição rear do working set
         tabelas[processo].ws_rear = (tabelas[processo].ws_rear + 1) % k;
         tabelas[processo].working_set[tabelas[processo].ws_rear] = pagina;
     }
@@ -205,13 +214,14 @@ void atualizar_historico(int processo, int pagina, int k)
 int working_set(int processo, int k)
 {
     int pagina_para_substituir = -1;
-    unsigned long oldest_time = ULONG_MAX;
+    unsigned long oldest_time = ULONG_MAX; // Inicializa com o maior valor de tempo possível
 
     for (int i = 0; i < NUM_PAGINAS; i++)
     {
         if (tabelas[processo].paginas[i].presente && tabelas[processo].paginas[i].timestamp < oldest_time)
         {
             int found = 0;
+            // Verifica se a página está no working set
             for (int j = 0; j < tabelas[processo].ws_count; j++)
             {
                 if (tabelas[processo].working_set[(tabelas[processo].ws_front + j) % k] == i)
@@ -221,7 +231,7 @@ int working_set(int processo, int k)
                 }
             }
             if (!found)
-            {
+            { // Se a página não está no working set, considera para substituição
                 oldest_time = tabelas[processo].paginas[i].timestamp;
                 pagina_para_substituir = i;
             }
